@@ -32,7 +32,9 @@
     "apiyaml": "esbuild_out/index.js"
   },
   "keywords": [
-    "api-generator"
+    "api-generator",
+    "yaml",
+    "yaml-to-api"
   ],
   "license": "MIT",
   "devDependencies": {

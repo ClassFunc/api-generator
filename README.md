@@ -15,7 +15,7 @@ npm i -g apiyaml # then starting use `apiyaml` command
 ### <a id="make:docs">make:docs</a>
 
 ```
-Usage: apig make:docs [options]
+Usage: apiyaml make:docs [options]
 
 make:docs
 

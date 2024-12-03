@@ -14,7 +14,7 @@ import {logDone} from "../src/util/logger";
     const helpInformation = program.commands.map(c => `
 ### <a id="${c.name()}">${c.name()}</a>
 \`\`\`
-${c.helpInformation().replace(`Usage: `, `Usage: apig`)}
+${c.helpInformation().replace(`Usage: `, `Usage: apiyaml`)}
 \`\`\``).join(`\n`);
 
 
