@@ -1,3 +1,5 @@
+#!/usr/bin/env node
+
 import { Command, Option } from "commander";
 import { VERSION } from "./version";
 import { make_docs } from "@/commands/make_docs";

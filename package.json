@@ -1,5 +1,5 @@
 {
-  "name": "api-generator",
+  "name": "apig",
   "version": "1.0.0",
   "description": "api generator",
   "main": "esbuild_out/index.js",
