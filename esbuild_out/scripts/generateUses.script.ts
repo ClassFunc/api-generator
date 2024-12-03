@@ -6,12 +6,7 @@ import path from "node:path";
 import fs from 'node:fs'
 import * as process from "node:process";
 
-process.stdout.write('argv');
-process.stdout.write(process.argv.toString())
-
 const outDirFull = process.argv.slice(2)?.[0]
-process.stdout.write(outDirFull)
-
 const docsDir = path.resolve(outDirFull)
 const apisDir = path.resolve(docsDir, 'apis')
 const templatesDir = path.join(__dirname, 'templates')

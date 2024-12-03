@@ -20,11 +20,11 @@ Usage: apig make:docs [options]
 make:docs
 
 Options:
-  -i, --inputYaml [inputYaml]      input yaml file path (local or https://) (default: "api.yaml")
-  -o, --outDir [outDir]            output directory path (default: "docs")
-  -n, --name [name]                name of output director
-  -d, --genDefaults [genDefaults]  generate defaults (default: false)
-  -h, --help                       display help for command
+  -i, --inputYaml [inputYaml]  input yaml file path (local or https://) (default: "api.yaml")
+  -o, --outDir [outDir]        output directory path (default: "docs")
+  -n, --name [name]            name of output director
+  -d, --genDefaults            generate defaults (default: true)
+  -h, --help                   display help for command
 
 ```
 

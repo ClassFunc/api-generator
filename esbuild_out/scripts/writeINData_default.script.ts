@@ -6,19 +6,19 @@ import path from "node:path";
 import fs from 'node:fs'
 import {parseAllDocuments} from "yaml";
 import get from "lodash/get";
+import * as process from "node:process";
+import {logError} from "@/util/logger";
 
-let args = process.argv.slice(2)
-const gens = ["api", "functions"]
-if (!args.length) {
-    args = gens
-}
-console.log('generating defaults values for:', args)
-
-const writeINData_defaultScript = (dir: string, requiredOnly?: boolean) => {
+export const writeINData_defaultScript = (
+    outDirPath: string,
+    yamlDestPath: string,
+    requiredOnly?: boolean
+) => {
     requiredOnly ??= true;
-    const yamlFile = path.resolve(`app/docs/${dir}.yaml`)
+    const yamlFile = path.resolve(yamlDestPath)
     if (!yamlFile) {
-        console.log(`no ${yamlFile} file`)
+        logError(`no ${yamlFile} file`)
+        process.exit();
     }
 
     const yValue = parseAllDocuments(fs.readFileSync(yamlFile).toString("utf-8"))
@@ -37,8 +37,8 @@ const writeINData_defaultScript = (dir: string, requiredOnly?: boolean) => {
             const required = get(sVal, "properties.data.required");
 
             const fName = `${sName}Data_default`
-            console.log(`-- ${fName}`)
-            console.log("--- ", {required})
+            // console.log(`-- ${fName}`)
+            // console.log("--- ", {required})
 
             const defaultsValues = {}
             // console.log(INDataProps)
@@ -51,13 +51,13 @@ const writeINData_defaultScript = (dir: string, requiredOnly?: boolean) => {
             // console.log({fName, defaultsValues})
 
             // write items
-            const defaultsDir = path.resolve(`app/docs/${dir}/defaults/`)
+            const defaultsDir = path.resolve(`${outDirPath}/defaults/`)
             fs.mkdirSync(defaultsDir, {recursive: true})
             const fPath = path.resolve(defaultsDir, `${fName}.ts`)
             fs.writeFileSync(
                 fPath,
                 `
-import {${sName}} from "@/app/docs/${dir}/models/${sName}"
+import {${sName}} from "../models/${sName}"
 
 type INData = ${sName}['data'];
 
@@ -129,9 +129,4 @@ function typeToValue(obj: any): any {
 
             return ret;
     }
-}
-
-for (const dir of args) {
-    // writeDefaultINValues
-    writeINData_defaultScript(dir, true)
 }

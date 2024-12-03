@@ -17,7 +17,7 @@ program.command("make:docs").description("make:docs")
     .option("-i, --inputYaml [inputYaml]", "input yaml file path (local or https://)", "api.yaml")
     .option("-o, --outDir [outDir]", "output directory path", "docs")
     .option("-n, --name [name]", "name of output director")
-    .option("-d, --genDefaults [genDefaults]", "generate defaults", false)
+    .option("-d, --genDefaults", "generate defaults", true)
     .action(make_docs);
 
 // NEXT_COMMAND__DONOTREMOVETHISLINE
