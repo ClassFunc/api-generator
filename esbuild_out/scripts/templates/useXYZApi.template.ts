@@ -1,5 +1,5 @@
 import {useEffect, useState} from "react";
-import {ConfigurationParameters, GreetingApi} from "@/app/docs/api";
+import {ConfigurationParameters, GreetingApi} from "../";
 import {useConfiguration} from "./_useConfiguration";
 import {getAuth} from "firebase/auth";
 

@@ -1,169 +1,8 @@
-import {z} from "zod";
-import {GlobalCommandInputSchema} from "@/types/GlobalCommandInputSchema";
-import {getCommandInputDeclarationCode, getParsedData,} from "@/util/commandParser";
-import {last} from "lodash";
-import {logDone, logError} from "@/util/logger";
-import * as process from "node:process";
-import path from "node:path";
-import {execSync} from "node:child_process";
-import {copyFileSync} from "node:fs";
-import {makeDir} from "@/util/pathUtils";
-
-const CommandInputSchema = GlobalCommandInputSchema.extend({
-    // from commander;
-    inputYaml: z.string(),
-    outDir: z.string(),
-    name: z.string().optional(),
-    genDefaults: z.boolean().optional().default(false),
-});
-
-type ICommandInput = z.infer<typeof CommandInputSchema>;
-let commandInputDeclarationCode = "";
-
-export function make_docs() {
-    const data = getParsedData(arguments, CommandInputSchema);
-    commandInputDeclarationCode = getCommandInputDeclarationCode(data);
-    const code = get_code(data);
-    // implementations
-
-    //"docs:api:gen": "rm -fr app/docs/api && curl https://docs.akasach.io/api.yaml -o app/docs/api.yaml && npx @openapitools/openapi-generator-cli generate -i app/docs/api.yaml --generator-name typescript-fetch -o app/docs/api && yarn run docs:uses:gen api",
-    //"docs:uses:gen": "app/docs/__generators__/scripts/generateUses.script.ts",
-    //"docs:defaults:gen": "app/docs/__generators__/scripts/writeINData_default.script.ts",
-    const nameYaml = last(data.inputYaml.split('/')) || '';
-    const name = data.name || nameYaml.split('.')?.[0];
-    if (!name) {
-        logError(new Error(`can not get name`))
-        process.exit(1)
-    }
-    const outDirFull = path.join(data.outDir, name)
-//     remove old
-    execSync(`rm -fr ${outDirFull}`);
-//     download or copy .yaml to outDir
-    const yamlDestPath = path.join(data.outDir, nameYaml);
-    makeDir(data.outDir)
-    if (data.inputYaml.startsWith(`https`)) {
-        execSync(`curl ${data.inputYaml} -o ${yamlDestPath}`)
-    } else {
-        copyFileSync(data.inputYaml, yamlDestPath)
-    }
-    // base generator
-    execSync(`npx @openapitools/openapi-generator-cli generate -i ${yamlDestPath} --generator-name typescript-fetch -o ${outDirFull}`)
-    logDone(`openapi-generator:`, outDirFull);
-// generate uses
-    execSync(`npx tsx ${__dirname}/scripts/generateUses.script.ts ${outDirFull}`)
-    logDone(`generated uses`, outDirFull + `/uses`)
-//     generate defaults
-}
-
-function get_code(data: ICommandInput) {
-    // work with input
-
-    return `
-${commandInputDeclarationCode}
-
-// other codes...
-`;
-}
-
-const _useConfigurationTs_code = (data: ICommandInput, outDirFull: string) => {
-    return `
-import {useEffect, useState} from "react";
-import {Configuration, ConfigurationParameters} from "@/${outDirFull}";
-import {getAuth} from "firebase/auth";
-
-export const useConfiguration = (configParams?: ConfigurationParameters) => {
-    const [conf, setConf] = useState<Configuration>()
-    useEffect(() => {
-        const conf = new Configuration(
-            {
-                accessToken: () => getAuth().currentUser?.getIdToken() || Promise.resolve(""),
-                ...configParams,
-                ...{
-                    basePath: process.env.NEXT_PUBLIC_DEV_API_BASE_URL
-                        ? process.env.NEXT_PUBLIC_DEV_API_BASE_URL
-                        : undefined
-                }
-            }
-        )
-        setConf(conf)
-    }, [])
-
-    return conf;
-}
-    `
-}
-
-
-const _useFnCommonTs_code = (data: ICommandInput, outDirFull: string) => {
-    return String.raw`
-import {ReactNode, useEffect, useRef} from "react";
-import {isError} from "lodash";
-import {toast} from "sonner";
-import {ConfigurationParameters} from "@/${outDirFull}";
-
-// types
-export type Unpacked<T> =
-    T extends (infer U)[] ? U :
-        T extends (...args: any[]) => infer U ? U :
-            T;
-
-export interface ApiConfigOptions {
-    useCachedValue?: boolean;
-}
-
-export interface ApiConfigParamsProps {
-    apiConfigParams?: ConfigurationParameters
-    apiConfigOptions?: ApiConfigOptions
-}
-
-//helpers
-export function errorToast(msg: string | Error, description?: string | ReactNode) {
-    if (isError(msg))
-        msg = msg.message;
-
-    toast.error(msg, {
-        description,
-        position: 'bottom-center',
-        duration: 3000
-    })
-    console.error(msg, description)
-}
-
-export function usePrevious(value: any) {
-    // create a new reference
-    const ref = useRef();
-
-    // store current value in ref
-    useEffect(() => {
-        ref.current = value;
-    }, [value]); // only re-run if value changes
-
-    // return previous value (happens before update in useEffect above)
-    return ref.current;
-}
-
-export function logDev(...value: any) {
-    if (process.env.NEXT_PUBLIC_APP_ENV === "development") {
-        console.log(...value)
-    }
-}
-
-export function trimDataOnStream(text: string): string {
-    text = text.trim()
-    if (text.startsWith('data:')) {
-        text = text.replace("data:", '')
-    }
-    return text;
-}`
-}
-
-const useFnTemplateTs_code = (data: ICommandInput, outDirFull: string) => {
-    return `
 import React, {useCallback, useEffect, useMemo, useState} from "react";
-import useGreetingApi from "@/${outDirFull}/useGreetingApi"
+import useGreetingApi from "./useGreetingApi"
 import {get, isEqual, isPlainObject, omit} from 'lodash'
 
-import {GreetingIN, GreetingOUT, ResponseError} from "@/app/docs/api"
+import {GreetingIN, GreetingOUT, ResponseError} from "../"
 import {atom, useAtom, useAtomValue} from "jotai";
 import {ApiConfigParamsProps, errorToast, logDev, trimDataOnStream, Unpacked, usePrevious} from "./_useFnCommon";
 
@@ -287,7 +126,7 @@ export const useGreetingPost = (
             setLoading(true);
             if (!api) {
                 setLoading(false)
-                errorToast(\`greetingApi is undefined\`)
+                errorToast(`greetingApi is undefined`)
                 console.groupEnd()
                 return;
             }
@@ -337,7 +176,7 @@ export const useGreetingPost = (
                                         const j = JSON.parse(chunkText);
                                         setStreamResponseStore(prev => [...prev, j])
                                     } catch (e: any) {
-                                        const lastChunks = chunkText.split(/\\r\\n|\\n|\\r/g)
+                                        const lastChunks = chunkText.split(/\r\n|\n|\r/g)
                                         logDev({lastChunks})
                                         for (let c of lastChunks) {
                                             c = c.trim();
@@ -404,12 +243,12 @@ export const useGreetingPost = (
             console.error(e)
             const {response} = e
             if (!response) {
-                errorToast(\`no response:\`, e.message)
+                errorToast(`no response:`, e.message)
                 return;
             }
             const serror = (await response?.json())?.error;
             errorToast(
-                \`call api "greetingPost" error: \${response.status} (\${get(serror, 'status')})\`,
+                `call api \`greetingPost\` error: ${response.status} (${get(serror, 'status')})`,
                 <pre>{get(serror, 'message')}</pre>
             )
             throw e;
@@ -532,37 +371,4 @@ export const useGreetingPost = (
         OUTComponent,
         cachedKey
     }
-}`
-}
-
-const useXYZApiTemplateTs_code = (data: ICommandInput, outDirFull: string) => {
-    return `
-import {useEffect, useState} from "react";
-import {ConfigurationParameters, GreetingApi} from "@/${outDirFull}";
-import {useConfiguration} from "./_useConfiguration";
-import {getAuth} from "firebase/auth";
-
-export interface ApiConfigOptions {
-    useCachedValue?: boolean;
-}
-
-const useGreetingApi = (
-    configParams?: ConfigurationParameters,
-    options?: ApiConfigOptions
-) => {
-    const conf = useConfiguration({
-        ...configParams,
-    })
-    const user = getAuth().currentUser
-    const [value, setValue] = useState<GreetingApi>()
-    useEffect(() => {
-        if (!user || !conf)
-            return;
-        setValue(new GreetingApi(conf))
-    }, [user, conf])
-
-    return {api: value, apiConf: conf};
-}
-
-export default useGreetingApi;`
 }

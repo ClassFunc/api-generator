@@ -5,7 +5,8 @@
   "main": "esbuild_out/index.js",
   "scripts": {
     "dev": "npx tsx internal/index.ts",
-    "build": "rm -fr esbuild_out/ && npm run version:update && npx esbuild --bundle src/index.ts --outdir=esbuild_out  --platform=node --minify && npm run readme:update",
+    "build": "rm -fr esbuild_out/ && npm run version:update && npx esbuild --bundle src/index.ts --outdir=esbuild_out  --platform=node --minify && npm run cpScripts && npm run readme:update",
+    "cpScripts": "cp -r src/commands/make_docs/scripts esbuild_out/",
     "start": "node esbuild_out/index.js",
     "readme:update": "export HELP_INFO_GEN=true && npx tsx scripts/readme_update.ts",
     "version:update": "npx tsx scripts/version_update.ts",
@@ -37,6 +38,12 @@
   "devDependencies": {
     "@types/lodash": "^4.17.13",
     "@types/node": "^22.9.0",
+    "@types/react": "^18.3.12",
+    "firebase": "^11.0.2",
+    "jotai": "^2.10.3",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "sonner": "^1.7.0",
     "typescript": "^5.6.3"
   }
 }

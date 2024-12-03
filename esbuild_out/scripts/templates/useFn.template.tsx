@@ -1,8 +1,8 @@
 import React, {useCallback, useEffect, useMemo, useState} from "react";
-import useGreetingApi from "@/app/docs/api/uses/useGreetingApi"
+import useGreetingApi from "./useGreetingApi"
 import {get, isEqual, isPlainObject, omit} from 'lodash'
 
-import {GreetingIN, GreetingOUT, ResponseError} from "@/app/docs/api"
+import {GreetingIN, GreetingOUT, ResponseError} from "../"
 import {atom, useAtom, useAtomValue} from "jotai";
 import {ApiConfigParamsProps, errorToast, logDev, trimDataOnStream, Unpacked, usePrevious} from "./_useFnCommon";
 

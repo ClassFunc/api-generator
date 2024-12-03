@@ -1,7 +1,7 @@
 import {ReactNode, useEffect, useRef} from "react";
 import {isError} from "lodash";
 import {toast} from "sonner";
-import {ConfigurationParameters} from "@/app/docs/api";
+import {ConfigurationParameters} from "../";
 
 // types
 export type Unpacked<T> =

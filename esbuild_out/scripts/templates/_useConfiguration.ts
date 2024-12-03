@@ -1,5 +1,5 @@
 import {useEffect, useState} from "react";
-import {Configuration, ConfigurationParameters} from "@/app/docs/api";
+import {Configuration, ConfigurationParameters} from "../";
 import {getAuth} from "firebase/auth";
 
 export const useConfiguration = (configParams?: ConfigurationParameters) => {

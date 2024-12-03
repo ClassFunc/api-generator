@@ -100,3 +100,7 @@ function insertLinesAtLastImport(filePath: string, linesToInsert: string[]): voi
         console.log('No import lines found in the file.');
     }
 }
+
+export const replacePathSlash = (text: string) => {
+    return text.replace(/(\/+)/g, '/');
+}
