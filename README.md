@@ -1,4 +1,4 @@
-# APIG: api generator
+# apiyaml: api generator
 
 ## Main functions
 
@@ -7,9 +7,9 @@
 ## Usage
 
 ```shell
-npx apig
+npx apiyaml
 #or
-npm i -g apig # then starting use `apig` command
+npm i -g apiyaml # then starting use `apiyaml` command
 ```
 
 ### <a id="make:docs">make:docs</a>
@@ -20,7 +20,8 @@ Usage: apig make:docs [options]
 make:docs
 
 Options:
-  -i, --inputYaml [inputYaml]  input yaml file path (local or https://) (default: "api.yaml")
+  -i, --inputYaml [inputYaml]  input yaml file path (local or https://)
+                               (default: "api.yaml")
   -o, --outDir [outDir]        output directory path (default: "docs")
   -n, --name [name]            name of output director
   -d, --genDefaults            generate defaults (default: true)

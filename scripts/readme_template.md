@@ -1,4 +1,4 @@
-# APIG: api generator
+# apiyaml: api generator
 
 
 ## Main functions
@@ -8,9 +8,9 @@
 ## Usage
 
 ```shell
-npx apig
+npx apiyaml
 #or
-npm i -g apig # then starting use `apig` command
+npm i -g apiyaml # then starting use `apiyaml` command
 ```
 
 {{helpInformation}}
