@@ -2,7 +2,7 @@
 
 ## Main functions
 
-- [x] [make:docs - make:docs](#make:docs)
+- [x] [make - make api from .yaml file](#make)
 
 ## Usage
 
@@ -12,12 +12,12 @@ npx apiyaml
 npm i -g apiyaml # then starting use `apiyaml` command
 ```
 
-### <a id="make:docs">make:docs</a>
+### <a id="make">make</a>
 
 ```
-Usage: apiyaml make:docs [options]
+Usage: apiyaml make [options]
 
-make:docs
+make api from .yaml file
 
 Options:
   -i, --inputYaml [inputYaml]  input yaml file path (local or https://)

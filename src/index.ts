@@ -13,7 +13,8 @@ program
         process.exit(0);
     });
 
-program.command("make:docs").description("make:docs")
+
+program.command("make").description("make api from .yaml file")
     .option("-i, --inputYaml [inputYaml]", "input yaml file path (local or https://)", "api.yaml")
     .option("-o, --outDir [outDir]", "output directory path", "docs")
     .option("-n, --name [name]", "name of output director")
