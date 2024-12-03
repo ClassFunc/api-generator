@@ -1,0 +1,42 @@
+{
+  "name": "api-generator",
+  "version": "1.0.0",
+  "description": "api generator",
+  "main": "esbuild_out/index.js",
+  "scripts": {
+    "dev": "npx tsx internal/index.ts",
+    "build": "rm -fr esbuild_out/ && npm run version:update && npx esbuild --bundle src/index.ts --outdir=esbuild_out  --platform=node --minify && npm run readme:update",
+    "start": "node esbuild_out/index.js",
+    "readme:update": "export HELP_INFO_GEN=true && npx tsx scripts/readme_update.ts",
+    "version:update": "npx tsx scripts/version_update.ts",
+    "release:local": "npm run build && rm -f `dirname $(which node)`/apig && npm i -g && chmod +x `dirname $(which node)`/apig",
+    "release": "npm run build && npm publish",
+    "test": "echo \"Error: no test specifiedn\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ClassFunc/api-generator.git"
+  },
+  "private": false,
+  "dependencies": {
+    "@asteasolutions/zod-to-openapi": "^7.2.0",
+    "chalk": "^4.1.2",
+    "commander": "^12.1.0",
+    "dotenv": "^16.4.5",
+    "lodash": "^4.17.21",
+    "yaml": "^2.6.0",
+    "zod": "^3.23.8"
+  },
+  "bin": {
+    "apig": "esbuild_out/index.js"
+  },
+  "keywords": [
+    "api-generator"
+  ],
+  "license": "MIT",
+  "devDependencies": {
+    "@types/lodash": "^4.17.13",
+    "@types/node": "^22.9.0",
+    "typescript": "^5.6.3"
+  }
+}
