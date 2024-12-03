@@ -1,5 +1,5 @@
 {
-  "name": "apig",
+  "name": "apiyaml",
   "version": "1.0.0",
   "description": "api generator",
   "main": "esbuild_out/index.js",
@@ -10,7 +10,7 @@
     "start": "node esbuild_out/index.js",
     "readme:update": "export HELP_INFO_GEN=true && npx tsx scripts/readme_update.ts",
     "version:update": "npx tsx scripts/version_update.ts",
-    "release:local": "npm run build && rm -f `dirname $(which node)`/apig && npm i -g && chmod +x `dirname $(which node)`/apig",
+    "release:local": "npm run build && rm -f `dirname $(which node)`/apiyaml && npm i -g && chmod +x `dirname $(which node)`/apiyaml",
     "release": "npm run build && npm publish",
     "test": "echo \"Error: no test specifiedn\" && exit 1"
   },
@@ -29,7 +29,7 @@
     "zod": "^3.23.8"
   },
   "bin": {
-    "apig": "esbuild_out/index.js"
+    "apiyaml": "esbuild_out/index.js"
   },
   "keywords": [
     "api-generator"
