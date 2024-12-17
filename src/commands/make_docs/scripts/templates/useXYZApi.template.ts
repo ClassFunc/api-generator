@@ -9,18 +9,18 @@ export interface ApiConfigOptions {
 
 const useGreetingApi = (
     configParams?: ConfigurationParameters,
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
     options?: ApiConfigOptions
 ) => {
     const conf = useConfiguration({
         ...configParams,
-    })
-    const user = getAuth().currentUser
-    const [value, setValue] = useState<GreetingApi>()
+    });
+    const [value, setValue] = useState<GreetingApi>();
     useEffect(() => {
-        if (!user || !conf)
+        if (!conf)
             return;
-        setValue(new GreetingApi(conf))
-    }, [user, conf])
+        setValue(new GreetingApi(conf));
+    }, [conf]);
 
     return {api: value, apiConf: conf};
 }

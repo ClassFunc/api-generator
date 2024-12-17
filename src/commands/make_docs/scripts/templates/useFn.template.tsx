@@ -39,9 +39,9 @@ interface Props extends ResultDataInnerComponentProps, ApiConfigParamsProps {
     useCachedResponse?: boolean;
 }
 
-type IGreetingResponeAtom = Record<string, GreetingOUT>;
+type IGreetingResponseAtom = Record<string, GreetingOUT>;
 
-export const greetingOUTStoreAtom = atom<IGreetingResponeAtom>({})
+export const greetingOUTStoreAtom = atom<IGreetingResponseAtom>({})
 export const lastGreetingOUTAtom = atom<GreetingOUT | null>(null)
 
 export const useGreetingPost = (

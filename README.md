@@ -20,8 +20,7 @@ Usage: apiyaml make [options]
 make api from .yaml file
 
 Options:
-  -i, --inputYaml [inputYaml]  input yaml file path (local or https://)
-                               (default: "api.yaml")
+  -i, --inputYaml [inputYaml]  input yaml file path (local or https://) (default: "api.yaml")
   -o, --outDir [outDir]        output directory path (default: "docs")
   -n, --name [name]            name of output director
   -d, --genDefaults            generate defaults (default: true)
