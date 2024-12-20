@@ -1,3 +1,4 @@
+// @ts-nocheck
 import React, {useCallback, useEffect, useMemo, useState} from "react";
 import useGreetingApi from "./useGreetingApi"
 import {get, isEqual, isPlainObject, omit} from 'lodash'

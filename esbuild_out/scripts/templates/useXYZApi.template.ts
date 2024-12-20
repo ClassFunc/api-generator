@@ -1,7 +1,7 @@
+// @ts-nocheck
 import {useEffect, useState} from "react";
 import {ConfigurationParameters, GreetingApi} from "../";
 import {useConfiguration} from "./_useConfiguration";
-import {getAuth} from "firebase/auth";
 
 export interface ApiConfigOptions {
     useCachedValue?: boolean;
@@ -9,7 +9,6 @@ export interface ApiConfigOptions {
 
 const useGreetingApi = (
     configParams?: ConfigurationParameters,
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
     options?: ApiConfigOptions
 ) => {
     const conf = useConfiguration({

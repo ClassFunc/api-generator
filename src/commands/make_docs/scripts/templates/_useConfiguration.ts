@@ -1,5 +1,6 @@
-import { useEffect, useState } from "react";
-import { Configuration, ConfigurationParameters } from "../";
+// @ts-nocheck
+import {useEffect, useState} from "react";
+import {Configuration, ConfigurationParameters} from "../";
 
 export const useConfiguration = (configParams?: ConfigurationParameters) => {
     const [conf, setConf] = useState<Configuration>();
@@ -8,13 +9,10 @@ export const useConfiguration = (configParams?: ConfigurationParameters) => {
             {
                 accessToken: new Promise((resolve) => {
                     try {
-                        // eslint-disable-next-line @typescript-eslint/ban-ts-comment
-                        // @ts-expect-error
-                        import("firebase/auth").then(({ getAuth }) => {
+                        import("firebase/auth").then(({getAuth}) => {
                             const idToken = getAuth().currentUser?.getIdToken();
                             resolve(idToken);
                         });
-                        // eslint-disable-next-line @typescript-eslint/no-unused-vars
                     } catch (e: unknown) {
                         resolve("");
                     }

@@ -1,5 +1,7 @@
-import { ReactNode, useEffect, useRef } from "react";
-import { ConfigurationParameters } from "../";
+// @ts-nocheck
+
+import {ReactNode, useEffect, useRef} from "react";
+import {ConfigurationParameters} from "../";
 
 // types
 export type Unpacked<T> =
@@ -19,9 +21,7 @@ export interface ApiConfigParamsProps {
 //helpers
 export function errorToast(msg: string | Error, description?: string | ReactNode) {
     try {
-        // eslint-disable-next-line @typescript-eslint/ban-ts-comment
-        // @ts-expect-error
-        import("sooner").then(({ toast }) => {
+        import("sonner").then(({toast}) => {
             if (msg instanceof Error)
                 msg = msg.message;
 
@@ -32,7 +32,6 @@ export function errorToast(msg: string | Error, description?: string | ReactNode
             });
             console.error(msg, description);
         });
-        // eslint-disable-next-line @typescript-eslint/no-unused-vars
     } catch (e: unknown) {
     }
 }
