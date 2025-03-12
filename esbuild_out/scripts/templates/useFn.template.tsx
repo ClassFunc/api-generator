@@ -187,7 +187,16 @@ export const useGreetingPost = (
                                             try {
                                                 const jString = trimDataOnStream(c);
                                                 logDev("trying parse:", jString)
-                                                setStreamResponseStore(prev => [...prev, JSON.parse(jString)])
+                                                let data
+                                                try {
+                                                    data = JSON.parse(jString)
+                                                } catch (e: unknown) {
+
+                                                }
+                                                if (!data) {
+                                                    continue
+                                                }
+                                                setStreamResponseStore(prev => [...prev, data])
                                             } catch (e: any) {
                                                 logDev(e.message)
                                             }
