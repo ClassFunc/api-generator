@@ -9,7 +9,7 @@ import {execSync} from "node:child_process";
 import {copyFileSync} from "node:fs";
 import {makeDir} from "@/util/pathUtils";
 import {writeINData_defaultScript} from "@/commands/make_docs/scripts/writeINData_default.script";
-import {writeINData_zodSchemasScript} from "@/commands/make_docs/scripts/writeINData_zodSchemas.script";
+import {writeZodSchemasScript} from "@/commands/make_docs/scripts/writeZodSchemas.script";
 
 const CommandInputSchema = GlobalCommandInputSchema.extend({
     // from commander;
@@ -57,7 +57,7 @@ export function make_docs() {
         logDone(`generated defaults:`, outDirFull + `/defaults`)
     }
     if (data.genZodSchemas) {
-        writeINData_zodSchemasScript(outDirFull, yamlDestPath, true)
+        writeZodSchemasScript(outDirFull, yamlDestPath)
         logDone(`generated zodSchemas:`, outDirFull + `/zodSchemas`)
     }
 }
