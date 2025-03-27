@@ -54,7 +54,7 @@ export const writeINData_defaultScript = (
 
             // write items
             appendContent(
-                `${outDirPath}/defaults/${fName}.ts`,
+                path.resolve(`${outDirPath}/defaults/${fName}.ts`),
                 `
 import {${sName}} from "../models/${sName}"
 
