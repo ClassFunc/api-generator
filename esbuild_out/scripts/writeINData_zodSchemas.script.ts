@@ -8,10 +8,13 @@ import {parseAllDocuments} from "yaml";
 import get from "lodash/get";
 import * as process from "node:process";
 import {logError} from "@/util/logger";
+import {toZodSchema} from "@/util/toZodSchema";
 import {appendContent} from "@/util/pathUtils";
 import {typeToValue} from "@/util/typeToValue";
+import {execSync} from "node:child_process";
 
-export const writeINData_defaultScript = (
+
+export const writeINData_zodSchemasScript = (
     outDirPath: string,
     yamlDestPath: string,
     requiredOnly?: boolean
@@ -52,18 +55,18 @@ export const writeINData_defaultScript = (
             })
             // console.log({fName, defaultsValues})
 
-            // write items
             appendContent(
-                `${outDirPath}/defaults/${fName}.ts`,
+                path.resolve(`${outDirPath}/zodSchemas/${sName}Schema.ts`),
                 `
-import {${sName}} from "../models/${sName}"
+import * as z from 'zod'
 
-type INData = ${sName}['data'];
+export const ${sName}Schema = ${toZodSchema(sVal)}
 
-export const ${fName}: INData = ${JSON.stringify(defaultsValues, null, 4)}
-`,
+`
             )
+
         })
     }
+    execSync(`npx prettier --write ${path.resolve(`${outDirPath}/zodSchemas`)}`)
 
 }

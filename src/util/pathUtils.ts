@@ -1,11 +1,22 @@
 import * as path from "node:path";
 import {logError, logWarning} from "./logger";
 import {execSync} from "node:child_process";
+// insertLinesAtLastImport(filePath, linesToInsert);
+// insertLinesAtLastImport
+// Example usage:
+// const filePath = 'your-file.ts';
+// const linesToInsert = [
+//     "import { Something } from './somewhere';",
+//     "import { AnotherThing } from './another-place';",
+//     "import { Something } from './somewhere';", // This will be skipped
+// ];
 import * as fs from 'fs';
+import {readFileSync} from "node:fs";
+import {isIncludes} from "@/util/strings";
 
 function getCwd(...p: string[]): string {
     const cwd = process.cwd();
-    return path.join(cwd, ...p)
+    return path.resolve(cwd, ...p)
 }
 
 function checkDirectoryExists(p: string): boolean {
@@ -71,36 +82,52 @@ export function srcFlowsPath(): string {
     return srcPath("flows");
 }
 
-/*
-* insertLinesAtLastImport
-// Example usage:
-const filePath = 'your-file.ts';
-const linesToInsert = [
-    'import { Something } from "./somewhere";',
-    'import { AnotherThing } from "./another-place";',
-];
-insertLinesAtLastImport(filePath, linesToInsert);
-* */
-function insertLinesAtLastImport(filePath: string, linesToInsert: string[]): void {
-    const fileContent = fs.readFileSync(filePath, 'utf-8');
-    const lines = fileContent.split('\n');
-
-    let lastImportIndex = -1;
-    for (let i = 0; i < lines.length; i++) {
-        if (lines[i].startsWith('import')) {
-            lastImportIndex = i;
+// success: returns string path file written
+export function appendContent(filePath: string, content: string, force = false) {
+    const fpath = srcPath(filePath)
+    let nsContent
+    try {
+        nsContent = readFileSync(fpath, {encoding: "utf-8"}).toString()
+    } catch (e: any) {
+        nsContent = ''
+    }
+    if (!isIncludes(nsContent, content)) {
+        const nameSpaceExportDone = makeFile(
+            fpath,
+            makeContent(`${nsContent}\n${content}`),
+            force,
+            false,
+        )
+        if (nameSpaceExportDone) {
+            return fpath
         }
     }
+    return '';
+}
 
-    if (lastImportIndex !== -1) {
-        lines.splice(lastImportIndex + 1, 0, ...linesToInsert);
-        const updatedContent = lines.join('\n');
-        fs.writeFileSync(filePath, updatedContent);
-    } else {
-        console.log('No import lines found in the file.');
+function makeContent(content: string): string {
+    try {
+        const lines = content.split(`\n`)
+        const importLines = lines
+            .filter(l => l.trim().startsWith('import'))
+            .map(l => l.replace(/["']/g, '"'));
+        const normalLines = lines.filter(l => !l.trim().startsWith('import'));
+        const uniqueLines = [...new Set(importLines), ...normalLines];
+        // Remove consecutive empty lines
+        const filteredLines = uniqueLines.reduce((acc: string[], line: string) => {
+            if (line.trim() === '' && acc.length > 0 && acc[acc.length - 1].trim() === '') {
+                return acc; // Skip adding consecutive empty lines
+            }
+            acc.push(line);
+            return acc;
+        }, []);
+        return filteredLines.join(`\n`)
+    } catch (error) {
+        logError("makeContent error:", error);
+        return ''
     }
 }
 
-export const replacePathSlash = (text: string) => {
-    return text.replace(/(\/+)/g, '/');
+export function convertToValidFilename(s: string) {
+    return (s.replace(/[\/|\\:*?\s"<>]/g, "_"));
 }

@@ -17,8 +17,9 @@ program
 program.command("make").description("make api from .yaml file")
     .option("-i, --inputYaml [inputYaml]", "input yaml file path (local or https://)", "api.yaml")
     .option("-o, --outDir [outDir]", "output directory path", "docs")
-    .option("-n, --name [name]", "name of output director")
+    .option("-n, --name [name]", "name of output directory")
     .option("-d, --genDefaults", "generate defaults", true)
+    .option("-z, --genZodSchemas", "generate zod schemas", true)
     .action(make_docs);
 
 // NEXT_COMMAND__DONOTREMOVETHISLINE

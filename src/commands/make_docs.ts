@@ -9,13 +9,15 @@ import {execSync} from "node:child_process";
 import {copyFileSync} from "node:fs";
 import {makeDir} from "@/util/pathUtils";
 import {writeINData_defaultScript} from "@/commands/make_docs/scripts/writeINData_default.script";
+import {writeINData_zodSchemasScript} from "@/commands/make_docs/scripts/writeINData_zodSchemas.script";
 
 const CommandInputSchema = GlobalCommandInputSchema.extend({
     // from commander;
     inputYaml: z.string(),
     outDir: z.string(),
     name: z.string().optional(),
-    genDefaults: z.boolean().optional().default(false),
+    genDefaults: z.boolean().optional().default(true),
+    genZodSchemas: z.boolean().optional().default(true),
 });
 
 type ICommandInput = z.infer<typeof CommandInputSchema>;
@@ -53,5 +55,9 @@ export function make_docs() {
     if (data.genDefaults) {
         writeINData_defaultScript(outDirFull, yamlDestPath, true)
         logDone(`generated defaults:`, outDirFull + `/defaults`)
+    }
+    if (data.genZodSchemas) {
+        writeINData_zodSchemasScript(outDirFull, yamlDestPath, true)
+        logDone(`generated zodSchemas:`, outDirFull + `/zodSchemas`)
     }
 }
