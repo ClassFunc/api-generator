@@ -38,6 +38,7 @@ interface Props extends ResultDataInnerComponentProps, ApiConfigParamsProps {
     streamCallback?: (streamStore: any[]) => any;
     fireImmediately?: boolean;
     useCachedResponse?: boolean;
+    fireIf?: (data?: INData) => boolean;
 }
 
 type IGreetingResponseAtom = Record<string, GreetingOUT>;
@@ -62,6 +63,7 @@ export const useGreetingPost = (
         streamCallback,
         fireImmediately = undefined,
         useCachedResponse = true,
+        fireIf,
     }: Props
 ) => {
     const {api} = useGreetingApi(apiConfigParams, apiConfigOptions);
@@ -127,7 +129,7 @@ export const useGreetingPost = (
             setLoading(true);
             if (!api) {
                 setLoading(false)
-                errorToast(`greetingApi is undefined`)
+                console.error(`greetingApi is undefined`)
                 console.groupEnd()
                 return;
             }
@@ -135,6 +137,10 @@ export const useGreetingPost = (
             if (!inData) {
                 // use last saved inData
                 inData = _inData;
+            }
+
+            if (fireIf && !fireIf(inData)) {
+                return;
             }
 
             logDev("↙️", inData)
