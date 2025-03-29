@@ -1,7 +1,7 @@
 // @ts-nocheck
 import React, {useCallback, useEffect, useMemo, useState} from "react";
 import useGreetingApi from "./useGreetingApi"
-import {get, isEqual, isPlainObject, omit} from 'lodash'
+import {get, isEmpty, isEqual, isPlainObject, omit} from 'lodash'
 
 import {GreetingIN, GreetingOUT, ResponseError} from "../"
 import {atom, useAtom, useAtomValue} from "jotai";
@@ -371,6 +371,12 @@ export const useGreetingPost = (
         [response, loading, CustomDataItemComponent]
     )
 
+    const cachedResponse = useMemo(() => {
+        if (!isEmpty(greetingOUTStore) || !isEmpty(inData))
+            return null
+        return greetingOUTStore[cachedKey(inData)];
+    }, [greetingOUTStore, inData])
+
     return {
         response,
         streamResponseStore,
@@ -381,6 +387,7 @@ export const useGreetingPost = (
         loading,
         api,
         cachedResponseStore: greetingOUTStore,
+        cachedResponse,
         DataItemComponent,
         DataComponent,
         ResultComponent,
