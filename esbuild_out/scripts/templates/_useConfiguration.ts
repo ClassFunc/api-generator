@@ -17,12 +17,12 @@ export const useConfiguration = (configParams?: ConfigurationParameters) => {
                         resolve("");
                     }
                 }),
-                ...configParams,
                 ...{
                     basePath: process.env.NEXT_PUBLIC_DEV_API_BASE_URL
                         ? process.env.NEXT_PUBLIC_DEV_API_BASE_URL
                         : undefined,
                 },
+                ...configParams,
             },
         );
         setConf(conf);
