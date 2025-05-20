@@ -262,11 +262,6 @@ export const useGreetingPost = (
                 errorToast(`no response:`, e.message)
                 return;
             }
-            const serror = (await response?.json())?.error;
-            // errorToast(
-            //     `call api \`greetingPost\` error: ${response.status} (${get(serror, 'status')})`,
-            //     <pre>{get(serror, 'message')}</pre>
-            // )
             throw e;
         } finally {
             setLoading(false)
