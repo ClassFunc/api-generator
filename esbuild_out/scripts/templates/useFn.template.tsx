@@ -121,9 +121,9 @@ export const useGreetingPost = (
     )
 
     const fire = async (inData?: INData) => {
-        if (loading) {
-            return;
-        }
+        // if (loading) {
+        //     return;
+        // }
         try {
             console.group("🔥 /greeting")
             setLoading(true);
