@@ -1,5 +1,5 @@
 // @ts-nocheck
-import React, {useCallback, useEffect, useMemo, useState} from "react";
+import React, {useCallback, useEffect, useMemo, useState, useRef} from "react"; // Added useRef
 import useGreetingApi from "./useGreetingApi"
 import {get, isEqual, isPlainObject, omit} from 'lodash'
 
@@ -73,6 +73,8 @@ export const useGreetingPost = (
     const [greetingOUTStore, setGreetingOUTStore] = useAtom(greetingOUTStoreAtom)
     const [loading, setLoading] = useState<boolean>(false)
     const prevResponse = usePrevious(response);
+    const abortControllerRef = useRef<AbortController | null>(null); // For aborting requests
+
     const memoStream = useAtomValue(
         useMemo(
             () => {
@@ -101,7 +103,7 @@ export const useGreetingPost = (
                 fire(_inData).then()
             }
         },
-        [fireImmediately, api, _inData]
+        [fireImmediately, api, _inData] // fire should not be in dependencies to avoid re-triggering
     )
 
     const isResponseChanged = useMemo(
@@ -120,10 +122,20 @@ export const useGreetingPost = (
         [streamCallback, streamResponseStore]
     )
 
-    const fire = async (inData?: INData) => {
-        // if (loading) {
-        //     return;
-        // }
+    const fire = async (inDataParam?: INData) => {
+        // Abort any previous ongoing request
+        if (abortControllerRef.current) {
+            abortControllerRef.current.abort();
+            logDev("Previous request aborted");
+        }
+
+        // Create a new AbortController for this request
+        const currentAbortController = new AbortController();
+        abortControllerRef.current = currentAbortController;
+        const signal = currentAbortController.signal;
+
+        let currentInData = inDataParam;
+
         try {
             console.group("🔥 /greeting")
             setLoading(true);
@@ -134,31 +146,48 @@ export const useGreetingPost = (
                 return;
             }
 
-            if (!inData) {
+            if (!currentInData) {
                 // use last saved inData
-                inData = _inData;
+                currentInData = _inData;
             }
 
-            if (fireIf && !fireIf(inData)) {
+            if (fireIf && !fireIf(currentInData)) {
+                // setLoading(false); // Handled by finally
                 return;
             }
 
-            logDev("↙️", inData)
+            logDev("↙️", currentInData)
+
+            // Check if aborted before making the API call
+            if (signal.aborted) {
+                logDev("Request aborted before sending.");
+                // setLoading(false); // Handled by finally
+                return;
+            }
 
             const greetingResponse = await api.greetingPostRaw(
-                {
+                { // API parameters
                     greetingIN: {
-                        data: inData!,
+                        data: currentInData!,
                     },
-                    ...{stream: !!memoStream}
+                    stream: !!memoStream, // Assuming 'stream' is an API parameter for the endpoint
+                },
+                { // RequestInit options for fetch
+                    signal: signal, // Pass the abort signal
                 }
             );
+
+            // Check if aborted after receiving headers but before processing body
+            if (signal.aborted) {
+                logDev("Request aborted after receiving headers.");
+                return;
+            }
 
             switch (greetingResponse.raw.status) {
                 case 200:
                     if (memoStream) {
                         const contentType = greetingResponse.raw.headers.get('content-type');
-                        if (contentType && contentType.includes('text/')) {// text/plain or text/event-stream
+                        if (contentType && contentType.includes('text/')) {
                             const reader = greetingResponse.raw.body?.getReader();
                             const textDecoder = new TextDecoder();
                             if (!reader) {
@@ -166,20 +195,33 @@ export const useGreetingPost = (
                                 return;
                             }
 
-                            // readChunks
                             const readChunk = async () => {
                                 try {
-                                    const {done, value} = await reader.read();
-                                    if (done) {
+                                    // Check signal before each read
+                                    if (signal.aborted) {
+                                        logDev("Stream reading aborted by signal.");
+                                        if (typeof reader.cancel === 'function') {
+                                            await reader.cancel("Aborted by user");
+                                        }
                                         return;
                                     }
+
+                                    const {done, value} = await reader.read();
+                                    if (done) {
+                                        if (signal.aborted) logDev("Stream finished, but signal was aborted around the same time.");
+                                        return;
+                                    }
+                                    if (signal.aborted) { // Check again after value is received
+                                        logDev("Stream reading aborted by signal after read().");
+                                        return;
+                                    }
+
                                     let chunkText = textDecoder.decode(value, {stream: true}).trim();
                                     if (!chunkText) {
-                                        return;
+                                        return; // Continue to next read if chunk is empty
                                     }
                                     try {
                                         chunkText = trimDataOnStream(chunkText)
-                                        // console.log({chunkText})
                                         const j = JSON.parse(chunkText);
                                         setStreamResponseStore(prev => [...prev, j])
                                     } catch (e: any) {
@@ -187,7 +229,7 @@ export const useGreetingPost = (
                                         logDev({lastChunks})
                                         for (let c of lastChunks) {
                                             c = c.trim();
-                                            if (!c) {//case of empty string
+                                            if (!c) {
                                                 continue;
                                             }
                                             try {
@@ -197,7 +239,7 @@ export const useGreetingPost = (
                                                 try {
                                                     data = JSON.parse(jString)
                                                 } catch (e: unknown) {
-
+                                                    // Ignore parsing error for individual sub-chunks if needed
                                                 }
                                                 if (!data) {
                                                     continue
@@ -208,73 +250,112 @@ export const useGreetingPost = (
                                             }
                                         }
                                     }
-
-                                    await readChunk(); // đệ quy để đọc chunk tiếp theo.
+                                    await readChunk();
                                 } catch (e: any) {
-                                    logDev(e)
+                                    if (e.name === 'AbortError' || signal.aborted) {
+                                        logDev("Stream reading aborted:", e.message);
+                                    } else {
+                                        logDev("Error reading stream chunk:", e);
+                                    }
                                 }
                             }
 
                             await readChunk()
+                            if (signal.aborted) {
+                                logDev("Stream processing loop finished due to abort.");
+                                return;
+                            }
                             // END readChunks
-                            // reset streamResponseStore
                             setTimeout(
                                 () => {
-                                    // reset stream data for next
-                                    logDev("reset streamResponseStore")
-                                    setStreamResponseStore(prev => [])
+                                    if (!signal.aborted) { // Only reset if not aborted
+                                        logDev("reset streamResponseStore")
+                                        setStreamResponseStore(prev => [])
+                                    } else {
+                                        logDev("Stream was aborted, not resetting streamResponseStore via timeout.")
+                                    }
                                 }, 1000
                             )
-
                             return;
                         }
                     } else {
-
+                        if (signal.aborted) {
+                            logDev("Request aborted before reading non-streamed value.");
+                            return;
+                        }
                         const v = await greetingResponse.value()
+                        if (signal.aborted) { // Check after value() resolves
+                            logDev("Request aborted during/after reading non-streamed value.");
+                            return;
+                        }
                         setResponse(v)
-
-                        // set cached response
                         if (useCachedResponse) {
                             setGreetingOUTStore(pre => (
                                 {
                                     ...pre,
-                                    [cachedKey(inData)]: v
+                                    [cachedKey(currentInData)]: v
                                 }
                             ))
                         }
                         logDev("↘️", v)
                         return v;
                     }
+                    break; // Added break for clarity, though return exits.
                 case 204:
                     return null;
                 default:
+                    if (signal.aborted) {
+                        logDev("Request aborted before reading error value.");
+                        return;
+                    }
                     return await greetingResponse.value();
             }
 
         } catch (e: any) {
-            e = e as ResponseError
-            if (useCachedResponse) {
-                setGreetingOUTStore(pre => omit(pre, [cachedKey(inData)]))
+            if (e.name === 'AbortError' || (signal && signal.aborted)) {
+                logDev("Fetch operation aborted:", e.message);
+                // No error toast for user-initiated aborts
+                // Cache is not modified on abort
+            } else {
+                e = e as ResponseError
+                if (useCachedResponse) {
+                    setGreetingOUTStore(pre => omit(pre, [cachedKey(currentInData)]))
+                }
+                console.error(e)
+                const {response: errorResponse} = e
+                if (!errorResponse) {
+                    errorToast(`no response:`, e.message)
+                    // setLoading(false); // Handled by finally
+                    return;
+                }
+                const serror = (await errorResponse?.json())?.error;
+                errorToast(
+                    `call api \`greetingPost\` error: ${errorResponse.status} (${get(serror, 'status')})`,
+                    <pre>{get(serror, 'message')}</pre>
+                )
+                throw e; // Re-throw non-abort errors
             }
-            console.error(e)
-            const {response} = e
-            if (!response) {
-                errorToast(`no response:`, e.message)
-                return;
-            }
-            const serror = (await response?.json())?.error;
-            errorToast(
-                `call api \`greetingPost\` error: ${response.status} (${get(serror, 'status')})`,
-                <pre>{get(serror, 'message')}</pre>
-            )
-            throw e;
         } finally {
             setLoading(false)
+            // Clear the controller for this specific call if it's still the one in the ref
+            if (abortControllerRef.current === currentAbortController) {
+                abortControllerRef.current = null;
+            }
             console.groupEnd()
         }
     }
 
+    const abort = useCallback(() => {
+        if (abortControllerRef.current) {
+            logDev("User explicitly called abort().");
+            abortControllerRef.current.abort();
+            // setLoading(false); // Optional: for immediate UI feedback, but finally in fire() handles it.
+        }
+    }, []);
+
+
     const OUTComponent = useCallback(
+        // ... (no changes needed here, relies on `loading` and `response` state)
         () => {
             if (!CustomOUTComponent)
                 return null;
@@ -288,10 +369,11 @@ export const useGreetingPost = (
             }
             return CustomOUTComponent(data)
         },
-        [response, loading, CustomOUTComponent]
+        [response, loading, CustomOUTComponent, LoadingComponent, EmptyComponent]
     )
 
     const ResultComponent = useCallback(
+        // ... (no changes needed here)
         () => {
             if (!CustomResultComponent)
                 return null;
@@ -305,10 +387,11 @@ export const useGreetingPost = (
             }
             return CustomResultComponent(data as unknown as OUTResult)
         },
-        [response, loading, CustomResultComponent]
+        [response, loading, CustomResultComponent, LoadingComponent, EmptyComponent]
     )
 
     const DataComponent = useCallback(
+        // ... (no changes needed here)
         () => {
             if (!CustomDataComponent)
                 return null;
@@ -322,10 +405,11 @@ export const useGreetingPost = (
             }
             return CustomDataComponent(data as unknown as OUTResultMaybeData)
         },
-        [response, loading, CustomDataComponent]
+        [response, loading, CustomDataComponent, LoadingComponent, EmptyComponent]
     )
 
     const DataItemComponent = useCallback(
+        // ... (no changes needed here)
         () => {
             if (!CustomDataItemComponent)
                 return null;
@@ -359,7 +443,7 @@ export const useGreetingPost = (
                             }
                             return (
                                 // use item
-                                <div className={dataItemClassName ?? ""} key={get(item, 'id', 'nokey')}>
+                                <div className={dataItemClassName ?? ""} key={get(item, 'id', `noID-${index}`)}>
                                     {JSON.stringify(item, null, 4)}
                                 </div>
                             )
@@ -368,12 +452,14 @@ export const useGreetingPost = (
                 </div>
             )
         },
-        [response, loading, CustomDataItemComponent]
+        [response, loading, CustomDataItemComponent, mainClassName, dataItemClassName, LoadingComponent, EmptyComponent]
     )
 
     const cachedResponse = useMemo(() => {
-        return greetingOUTStore[cachedKey(inData)];
-    }, [greetingOUTStore, inData])
+        // Use _inData for consistency if inData prop is undefined initially
+        const keyLookup = _inData !== undefined ? _inData : inData;
+        return greetingOUTStore[cachedKey(keyLookup)];
+    }, [greetingOUTStore, _inData, inData]) // Added _inData
 
     const responseSWR = useMemo(
         () => {
@@ -389,6 +475,7 @@ export const useGreetingPost = (
         isResponseChanged,
         fire,
         postAction: fire,
+        abort, // Expose the abort function
         setInData,
         loading,
         api,
