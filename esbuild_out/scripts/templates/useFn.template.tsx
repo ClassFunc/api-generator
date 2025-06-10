@@ -1,10 +1,11 @@
 // @ts-nocheck
-import React, {useCallback, useEffect, useMemo, useState, useRef} from "react"; // Added useRef
+import React, {useCallback, useEffect, useMemo, useRef, useState} from "react"; // Added useRef
 import useGreetingApi from "./useGreetingApi"
 import {get, isEqual, isPlainObject, omit} from 'lodash'
 
 import {GreetingIN, GreetingOUT, ResponseError} from "../"
 import {atom, useAtom, useAtomValue} from "jotai";
+import {useResetAtom} from "jotai/utils";
 import {ApiConfigParamsProps, errorToast, logDev, trimDataOnStream, Unpacked, usePrevious} from "./_useFnCommon";
 
 type INData = Unpacked<GreetingIN['data']>
@@ -69,6 +70,7 @@ export const useGreetingPost = (
     const {api} = useGreetingApi(apiConfigParams, apiConfigOptions);
     const [_inData, setInData] = useState<INData | undefined>(inData)
     const [response, setResponse] = useAtom<GreetingOUT>(lastGreetingOUTAtom)
+    const resetResponse = useResetAtom(lastGreetingOUTAtom)
     const [streamResponseStore, setStreamResponseStore] = useState<any[]>([])
     const [greetingOUTStore, setGreetingOUTStore] = useAtom(greetingOUTStoreAtom)
     const [loading, setLoading] = useState<boolean>(false)
@@ -270,7 +272,7 @@ export const useGreetingPost = (
                                 () => {
                                     if (!signal.aborted) { // Only reset if not aborted
                                         logDev("reset streamResponseStore")
-                                        setStreamResponseStore(prev => [])
+                                        setStreamResponseStore(() => [])
                                     } else {
                                         logDev("Stream was aborted, not resetting streamResponseStore via timeout.")
                                     }
@@ -471,6 +473,7 @@ export const useGreetingPost = (
     return {
         response,
         responseSWR,
+        resetResponse,
         streamResponseStore,
         isResponseChanged,
         fire,
