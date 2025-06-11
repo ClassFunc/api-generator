@@ -78,7 +78,7 @@ export const useGreetingPost = (
     }: Props
 ) => {
     const {api} = useGreetingApi(apiConfigParams, apiConfigOptions);
-    const [_inData, setInData] = useState<INData | undefined>(inData)
+    const [_inData, setInData] = useAtom<INData | undefined>(useDeepCompareMemo(()=>atom(inData),[inData]));
     const [response, setResponse] = useAtom<GreetingOUT>(lastGreetingOUTAtom)
     const resetResponse = useResetAtom(lastGreetingOUTAtom)
     const [streamResponseStore, setStreamResponseStore] = useState<any[]>([])
