@@ -1,7 +1,8 @@
 // @ts-nocheck
 
-import {ReactNode, useEffect, useRef} from "react";
+import {ReactNode, useEffect, useMemo, useRef} from "react";
 import {ConfigurationParameters} from "../";
+import isEqual from "lodash/isEqual";
 
 // types
 export type Unpacked<T> =
@@ -61,4 +62,14 @@ export function trimDataOnStream(text: string): string {
         text = text.replace("data:", "");
     }
     return text;
+}
+
+export function useDeepCompareMemo(factory, dependencies) {
+    const dependenciesRef = useRef();
+
+    if (!isEqual(dependenciesRef.current, dependencies)) {
+        dependenciesRef.current = dependencies;
+    }
+
+    return useMemo(factory, dependenciesRef.current);
 }

@@ -6,7 +6,15 @@ import {get, isEqual, isPlainObject, omit} from 'lodash'
 import {GreetingIN, GreetingOUT, ResponseError} from "../"
 import {atom, useAtom, useAtomValue} from "jotai";
 import {useResetAtom} from "jotai/utils";
-import {ApiConfigParamsProps, errorToast, logDev, trimDataOnStream, Unpacked, usePrevious} from "./_useFnCommon";
+import {
+    ApiConfigParamsProps,
+    errorToast,
+    logDev,
+    trimDataOnStream,
+    Unpacked,
+    usePrevious,
+    useDeepCompareMemo
+} from "./_useFnCommon";
 
 type INData = Unpacked<GreetingIN['data']>
 type OUTResult = Unpacked<GreetingOUT['result']>
@@ -40,6 +48,7 @@ interface Props extends ResultDataInnerComponentProps, ApiConfigParamsProps {
     fireImmediately?: boolean;
     useCachedResponse?: boolean;
     fireIf?: (data?: INData) => boolean;
+    fireEffectDeps?: Array<any>;
 }
 
 type IGreetingResponseAtom = Record<string, GreetingOUT>;
@@ -65,6 +74,7 @@ export const useGreetingPost = (
         fireImmediately = undefined,
         useCachedResponse = true,
         fireIf,
+        fireEffectDeps,
     }: Props
 ) => {
     const {api} = useGreetingApi(apiConfigParams, apiConfigOptions);
@@ -85,6 +95,23 @@ export const useGreetingPost = (
             [stream]
         )
     )
+    const prevFireEffectDepsAtom = usePrevious(fireEffectDeps);
+    const [fireEffectDepsChanged, setFireEffectDepsChanged] = useAtom(
+        useDeepCompareMemo(
+            () => {
+                const isChanged = !isEqual(prevFireEffectDepsAtom, fireEffectDeps)
+                return atom(isChanged);
+            }, [fireEffectDeps, prevFireEffectDepsAtom]
+        )
+    )
+    useEffect(() => {
+        if (!api)
+            return;
+        if (fireEffectDepsChanged) {
+            fire(_inData).then();
+            setFireEffectDepsChanged(false);
+        }
+    }, [fireEffectDepsChanged, api, _inData])
 
     const cachedKey = (__inData: any) => {
         return "/greetingPost;in=" + JSON.stringify(__inData)
