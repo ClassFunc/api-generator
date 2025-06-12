@@ -1,7 +1,7 @@
 // @ts-nocheck
 import React, {useCallback, useEffect, useMemo, useRef, useState} from "react"; // Added useRef
 import useGreetingApi from "./useGreetingApi"
-import {get, isEqual, isPlainObject, omit} from 'lodash'
+import {get, isEqual, isPlainObject, merge, omit} from 'lodash'
 
 import {GreetingIN, GreetingOUT, ResponseError} from "../"
 import {atom, useAtom, useAtomValue} from "jotai";
@@ -11,9 +11,10 @@ import {
     errorToast,
     logDev,
     trimDataOnStream,
+    unflattenObject,
     Unpacked,
-    usePrevious,
-    useDeepCompareMemo
+    useDeepCompareMemo,
+    usePrevious
 } from "./_useFnCommon";
 
 type INData = Unpacked<GreetingIN['data']>
@@ -40,6 +41,28 @@ interface ResultDataInnerComponentProps {
     EmptyComponent?: () => React.ReactNode;
 }
 
+interface InfinityScrollConfigProps {
+    dataFilterFn: (item: OUTResultMaybeDataItem) => boolean;
+    scrollRootRef?: React.RefObject<HTMLDivElement | null> | null;
+    dataPath?: string;
+    nextCursorPath?: string;
+    fireNextCursorPath?: string;
+    hasMorePath?: string;
+    observerConfig?: Omit<IntersectionObserverInit, 'root'>;
+}
+
+const infinityScrollDefault: InfinityScrollConfigProps = {
+    dataFilterFn: Boolean,
+    scrollRootRef: null,
+    dataPath: `result.data`,
+    nextCursorPath: `result.nextCursor`,
+    fireNextCursorPath: `nextCursor`,
+    hasMorePath: `result.hasMore`,
+    observerConfig: {
+        threshold: 0.1,
+        rootMargin: "0px 0px 200px 0px"
+    }
+}
 
 interface Props extends ResultDataInnerComponentProps, ApiConfigParamsProps {
     inData?: INData;
@@ -49,6 +72,7 @@ interface Props extends ResultDataInnerComponentProps, ApiConfigParamsProps {
     useCachedResponse?: boolean;
     fireIf?: (data?: INData) => boolean;
     fireEffectDeps?: Array<any>;
+    infinityScrollConfig?: InfinityScrollConfigProps;
 }
 
 type IGreetingResponseAtom = Record<string, GreetingOUT>;
@@ -75,10 +99,16 @@ export const useGreetingPost = (
         useCachedResponse = true,
         fireIf,
         fireEffectDeps,
+        infinityScrollConfig,
     }: Props
 ) => {
     const {api} = useGreetingApi(apiConfigParams, apiConfigOptions);
-    const [_inData, setInData] = useAtom<INData | undefined>(useDeepCompareMemo(()=>atom(inData),[inData]));
+    const [_inData, setInData] = useAtom<INData | undefined>(
+        useDeepCompareMemo(
+            () => atom(inData),
+            [inData]
+        )
+    );
     const [response, setResponse] = useAtom<GreetingOUT>(lastGreetingOUTAtom)
     const resetResponse = useResetAtom(lastGreetingOUTAtom)
     const [streamResponseStore, setStreamResponseStore] = useState<any[]>([])
@@ -86,6 +116,13 @@ export const useGreetingPost = (
     const [loading, setLoading] = useState<boolean>(false)
     const prevResponse = usePrevious(response);
     const abortControllerRef = useRef<AbortController | null>(null); // For aborting requests
+
+    const _infScrollConfig = useAtomValue<InfinityScrollConfigProps | null>(
+        useDeepCompareMemo(
+            () => atom(infinityScrollConfig),
+            [infinityScrollConfig]
+        )
+    )
 
     const memoStream = useAtomValue(
         useMemo(
@@ -382,6 +419,87 @@ export const useGreetingPost = (
         }
     }, []);
 
+    // settings for infinity scroll
+    const nextCursorValue = useMemo(() => {
+        if (!_infScrollConfig || !response)
+            return;
+        return get(response, _infScrollConfig?.nextCursorPath ?? infinityScrollDefault.nextCursorPath)
+    }, [response, _infScrollConfig]);
+
+    const hasMoreValue = useMemo(() => {
+        if (!_infScrollConfig || !response)
+            return;
+        return get(response, _infScrollConfig?.hasMorePath ?? infinityScrollDefault.hasMorePath)
+    }, [response, _infScrollConfig]);
+
+    const infinityScrollFilteredData = useMemo(
+        () => {
+            if (!_infScrollConfig || !greetingOUTStore || typeof greetingOUTStore !== 'object')
+                return [];
+            const flattenData = Object.values(greetingOUTStore)
+                .flatMap(pageResponse => get(pageResponse, _infScrollConfig.dataPath ?? infinityScrollDefault.dataPath, []))
+            const dataFilterFn = _infScrollConfig.dataFilterFn || infinityScrollDefault.dataFilterFn;
+            return flattenData.filter(dataFilterFn)
+        },
+        [greetingOUTStore, _infScrollConfig]
+    )
+    const loadInfinity = useCallback(async () => {
+        if (loading || !hasMoreValue || !nextCursorValue) {
+            return;
+        }
+        try {
+            const fireNextCursorPath = _infScrollConfig?.fireNextCursorPath ?? infinityScrollDefault.fireNextCursorPath;
+            await fire(
+                merge(
+                    _inData,
+                    unflattenObject({[fireNextCursorPath]: nextCursorValue})
+                )
+            );
+        } catch (error) {
+            console.error("loadInfinity error:", error);
+        }
+    }, [loading, hasMoreValue, nextCursorValue, _inData]);
+
+    const observerTargetRef = useRef<HTMLDivElement>(null);
+    const InfinityScrollObserver = useCallback(() => {
+        if (!_infScrollConfig || !hasMoreValue || loading)
+            return null;
+
+        return (
+            <div ref={observerTargetRef} style={{height: '1px', marginTop: '1px'}} aria-hidden="true"/>
+        )
+    }, [_infScrollConfig, hasMoreValue, loading])
+
+    useEffect(() => {
+        const observerTargetElement = observerTargetRef.current;
+        if (!observerTargetElement) {
+            return;
+        }
+        const scrollRootElement = _infScrollConfig?.scrollRootRef?.current;
+        const observer = new IntersectionObserver(
+            (entries) => {
+                const entry = entries[0];
+                if (entry.isIntersecting && hasMoreValue && !isLoading) {
+                    loadInfinity();
+                }
+            },
+            {
+                root: scrollRootElement,
+                threshold: _infScrollConfig?.observerConfig?.threshold || 0.1,
+                rootMargin: _infScrollConfig?.observerConfig?.threshold || "0px 0px 200px 0px"
+            }
+        );
+
+        observer.observe(observerTargetElement);
+
+        return () => {
+            if (observerTargetElement) {
+                observer.unobserve(observerTargetElement);
+            }
+        };
+    }, [hasMoreValue, loading, _infScrollConfig]);
+
+    // END for infinity scroll
 
     const OUTComponent = useCallback(
         // ... (no changes needed here, relies on `loading` and `response` state)
@@ -515,6 +633,8 @@ export const useGreetingPost = (
         DataComponent,
         ResultComponent,
         OUTComponent,
+        InfinityScrollObserver,
+        infinityScrollFilteredData,
         cachedKey
     }
 }

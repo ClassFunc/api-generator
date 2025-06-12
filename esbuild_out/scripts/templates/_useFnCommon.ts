@@ -3,6 +3,7 @@
 import {ReactNode, useEffect, useMemo, useRef} from "react";
 import {ConfigurationParameters} from "../";
 import isEqual from "lodash/isEqual";
+import set from "lodash/set";
 
 // types
 export type Unpacked<T> =
@@ -72,4 +73,14 @@ export function useDeepCompareMemo(factory, dependencies) {
     }
 
     return useMemo(factory, dependenciesRef.current);
+}
+
+export function unflattenObject(obj) {
+    const result = {};
+    for (const key in obj) {
+        if (Object.prototype.hasOwnProperty.call(obj, key)) {
+            set(result, key, obj[key]);
+        }
+    }
+    return result;
 }
