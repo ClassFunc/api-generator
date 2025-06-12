@@ -12,8 +12,8 @@ import {
     logDev,
     trimDataOnStream,
     Unpacked,
-    usePrevious,
-    useDeepCompareMemo
+    useDeepCompareMemo,
+    usePrevious
 } from "./_useFnCommon";
 
 type INData = Unpacked<GreetingIN['data']>
@@ -49,6 +49,10 @@ interface Props extends ResultDataInnerComponentProps, ApiConfigParamsProps {
     useCachedResponse?: boolean;
     fireIf?: (data?: INData) => boolean;
     fireEffectDeps?: Array<any>;
+    cachedResponseStoreValuesFilter?: {
+        path?: string;
+        fn: (item: any) => boolean;
+    };
 }
 
 type IGreetingResponseAtom = Record<string, GreetingOUT>;
@@ -75,6 +79,7 @@ export const useGreetingPost = (
         useCachedResponse = true,
         fireIf,
         fireEffectDeps,
+        cachedResponseStoreValuesFilter,
     }: Props
 ) => {
     const {api} = useGreetingApi(apiConfigParams, apiConfigOptions);
@@ -86,6 +91,7 @@ export const useGreetingPost = (
     const [loading, setLoading] = useState<boolean>(false)
     const prevResponse = usePrevious(response);
     const abortControllerRef = useRef<AbortController | null>(null); // For aborting requests
+
 
     const memoStream = useAtomValue(
         useMemo(
@@ -497,6 +503,19 @@ export const useGreetingPost = (
         [cachedResponse, response]
     )
 
+    const cachedResponseStoreFilteredValues: any[] = useDeepCompareMemo(
+        () => {
+            if (!greetingOUTStore || !cachedResponseStoreValuesFilter) {
+                return []
+            }
+            const filterPath = cachedResponseStoreValuesFilter.path || 'result.data'
+            return Object.values(greetingOUTStore)
+                .flatMap(r => get(r, filterPath))
+                .filter(cachedResponseStoreValuesFilter.fn)
+        },
+        [greetingOUTStore]
+    )
+
     return {
         response,
         responseSWR,
@@ -510,6 +529,7 @@ export const useGreetingPost = (
         loading,
         api,
         cachedResponseStore: greetingOUTStore,
+        cachedResponseStoreFilteredValues,
         cachedResponse,
         DataItemComponent,
         DataComponent,
