@@ -191,7 +191,7 @@ export const useGreetingPost = (
                 return;
             }
 
-            logDev("↙️", currentInData)
+            logDev("🚀", currentInData)
 
             // Check if aborted before making the API call
             if (signal.aborted) {
@@ -332,7 +332,7 @@ export const useGreetingPost = (
                                 }
                             ))
                         }
-                        logDev("↘️", v)
+                        logDev("✅", v)
                         return v;
                     }
                     break; // Added break for clarity, though return exits.
