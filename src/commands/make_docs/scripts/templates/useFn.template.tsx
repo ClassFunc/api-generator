@@ -1,5 +1,5 @@
 // @ts-nocheck
-import React, {useCallback, useEffect, useMemo, useRef, useState} from "react"; // Added useRef
+import React, {useCallback, useEffect, useMemo, useRef, useState} from "react";
 import useGreetingApi from "./useGreetingApi"
 import {get, isEqual, isPlainObject, omit} from 'lodash'
 
@@ -19,8 +19,8 @@ import {
 type INData = Unpacked<GreetingIN['data']>
 type OUTResult = Unpacked<GreetingOUT['result']>
 export type OUTResultMaybeData = OUTResult extends { data: infer U }
-    ? U // If 'data' exists, extract its type (U)
-    : OUTResult // If 'data' doesn't exist, use the 'result' type itself
+    ? U
+    : OUTResult
 export type OUTResultMaybeDataItem = Unpacked<OUTResultMaybeData>
 
 function valueOfOUTResultMaybeData(result: unknown): OUTResultMaybeData | OUTResult | null {
@@ -53,7 +53,7 @@ interface Props extends ResultDataInnerComponentProps, ApiConfigParamsProps {
         path?: string;
         fn: (item: any) => boolean;
     };
-    abortAble?: boolean; // <--- Thêm prop abortAble
+    abortAble?: boolean;
 }
 
 type IGreetingResponseAtom = Record<string, GreetingOUT>;
@@ -81,7 +81,7 @@ export const useGreetingPost = (
         fireIf,
         fireEffectDeps,
         cachedResponseStoreValuesFilter,
-        abortAble = true, // <--- Destructure và đặt giá trị mặc định
+        abortAble = true,
     }: Props
 ) => {
     const {api} = useGreetingApi(apiConfigParams, apiConfigOptions);
@@ -92,7 +92,10 @@ export const useGreetingPost = (
     const [greetingOUTStore, setGreetingOUTStore] = useAtom(greetingOUTStoreAtom)
     const [loading, setLoading] = useState<boolean>(false)
     const prevResponse = usePrevious(response);
-    const abortControllerRef = useRef<AbortController | null>(null); // For aborting requests
+
+    const abortControllerRef = useRef<AbortController | null>(null);
+    // Ref để lưu trữ inData của request đang được theo dõi bởi abortControllerRef
+    const activeRequestInDataRef = useRef<INData | undefined | null>(null);
 
 
     const memoStream = useAtomValue(
@@ -130,7 +133,6 @@ export const useGreetingPost = (
             if (!api)
                 return;
 
-            // automatically fire if _inData is set.
             if (_inData && typeof fireImmediately === "undefined") {
                 fire(_inData).then()
                 return;
@@ -140,7 +142,7 @@ export const useGreetingPost = (
                 fire(_inData).then()
             }
         },
-        [fireImmediately, api, _inData] // fire should not be in dependencies to avoid re-triggering
+        [fireImmediately, api, _inData]
     )
 
     const isResponseChanged = useMemo(
@@ -160,24 +162,32 @@ export const useGreetingPost = (
     )
 
     const fire = async (inDataParam?: INData) => {
-        let currentAbortController: AbortController | null = null;
-        let signal: AbortSignal | undefined = undefined;
+        const currentCallInData: INData | undefined = inDataParam ?? _inData;
+
+        let localAbortController: AbortController | null = null;
+        let localSignal: AbortSignal | undefined = undefined;
 
         if (abortAble) {
-            // Abort any previous ongoing request
-            if (abortControllerRef.current) {
+            // Kiểm tra nếu có request đang active và inData của nó giống với request hiện tại
+            if (abortControllerRef.current && isEqual(activeRequestInDataRef.current, currentCallInData)) {
+                logDev("Aborting previous request with identical inData:", activeRequestInDataRef.current);
                 abortControllerRef.current.abort();
-                logDev("Previous request aborted");
+                // abortControllerRef.current và activeRequestInDataRef.current sẽ được dọn dẹp
+                // bởi finally của request bị abort nếu nó là request đang active,
+                // hoặc sẽ được ghi đè bởi request mới này.
+            } else if (abortControllerRef.current) {
+                logDev("New request with different inData. Previous active request (inData:", activeRequestInDataRef.current, ") continues. New request inData:", currentCallInData);
             }
 
-            // Create a new AbortController for this request
-            currentAbortController = new AbortController();
-            abortControllerRef.current = currentAbortController;
-            signal = currentAbortController.signal;
+            // Tạo AbortController mới cho request hiện tại
+            localAbortController = new AbortController();
+            localSignal = localAbortController.signal;
+
+            // Request hiện tại trở thành request "có thể abort" chính
+            abortControllerRef.current = localAbortController;
+            activeRequestInDataRef.current = currentCallInData;
         }
 
-
-        let currentInData = inDataParam;
 
         try {
             console.group("🔥 /greeting")
@@ -189,40 +199,36 @@ export const useGreetingPost = (
                 return;
             }
 
-            if (!currentInData) {
-                // use last saved inData
-                currentInData = _inData;
-            }
+            // currentInData đã được xác định là currentCallInData ở trên
+            // if (!currentCallInData) { // Không cần nữa
+            //     currentCallInData = _inData;
+            // }
 
-            if (fireIf && !fireIf(currentInData)) {
-                // setLoading(false); // Handled by finally
+            if (fireIf && !fireIf(currentCallInData)) {
                 return;
             }
 
-            logDev("🚀", currentInData)
+            logDev("🚀", currentCallInData)
 
-            // Check if aborted before making the API call
-            if (abortAble && signal?.aborted) {
-                logDev("Request aborted before sending.");
-                // setLoading(false); // Handled by finally
+            if (abortAble && localSignal?.aborted) {
+                logDev("Request aborted before sending for inData:", currentCallInData);
                 return;
             }
 
             const greetingResponse = await api.greetingPostRaw(
-                { // API parameters
+                {
                     greetingIN: {
-                        data: currentInData!,
+                        data: currentCallInData!,
                     },
-                    stream: !!memoStream, // Assuming 'stream' is an API parameter for the endpoint
+                    stream: !!memoStream,
                 },
-                { // RequestInit options for fetch
-                    signal: abortAble ? signal : undefined, // Pass the abort signal only if abortAble
+                {
+                    signal: abortAble ? localSignal : undefined,
                 }
             );
 
-            // Check if aborted after receiving headers but before processing body
-            if (abortAble && signal?.aborted) {
-                logDev("Request aborted after receiving headers.");
+            if (abortAble && localSignal?.aborted) {
+                logDev("Request aborted after receiving headers for inData:", currentCallInData);
                 return;
             }
 
@@ -240,9 +246,8 @@ export const useGreetingPost = (
 
                             const readChunk = async () => {
                                 try {
-                                    // Check signal before each read
-                                    if (abortAble && signal?.aborted) {
-                                        logDev("Stream reading aborted by signal.");
+                                    if (abortAble && localSignal?.aborted) {
+                                        logDev("Stream reading aborted by signal for inData:", currentCallInData);
                                         if (typeof reader.cancel === 'function') {
                                             await reader.cancel("Aborted by user");
                                         }
@@ -251,17 +256,17 @@ export const useGreetingPost = (
 
                                     const {done, value} = await reader.read();
                                     if (done) {
-                                        if (abortAble && signal?.aborted) logDev("Stream finished, but signal was aborted around the same time.");
+                                        if (abortAble && localSignal?.aborted) logDev("Stream finished for inData:", currentCallInData, ", but signal was aborted.");
                                         return;
                                     }
-                                    if (abortAble && signal?.aborted) { // Check again after value is received
-                                        logDev("Stream reading aborted by signal after read().");
+                                    if (abortAble && localSignal?.aborted) {
+                                        logDev("Stream reading aborted by signal after read() for inData:", currentCallInData);
                                         return;
                                     }
 
                                     let chunkText = textDecoder.decode(value, {stream: true}).trim();
                                     if (!chunkText) {
-                                        return; // Continue to next read if chunk is empty
+                                        return;
                                     }
                                     try {
                                         chunkText = trimDataOnStream(chunkText)
@@ -282,7 +287,7 @@ export const useGreetingPost = (
                                                 try {
                                                     data = JSON.parse(jString)
                                                 } catch (e: unknown) {
-                                                    // Ignore parsing error for individual sub-chunks if needed
+                                                    // Ignore
                                                 }
                                                 if (!data) {
                                                     continue
@@ -295,40 +300,39 @@ export const useGreetingPost = (
                                     }
                                     await readChunk();
                                 } catch (e: any) {
-                                    if (abortAble && (e.name === 'AbortError' || signal?.aborted)) {
-                                        logDev("Stream reading aborted:", e.message);
+                                    if (abortAble && (e.name === 'AbortError' || localSignal?.aborted)) {
+                                        logDev("Stream reading aborted for inData:", currentCallInData, "Error:", e.message);
                                     } else {
-                                        logDev("Error reading stream chunk:", e);
+                                        logDev("Error reading stream chunk for inData:", currentCallInData, "Error:", e);
                                     }
                                 }
                             }
 
                             await readChunk()
-                            if (abortAble && signal?.aborted) {
-                                logDev("Stream processing loop finished due to abort.");
+                            if (abortAble && localSignal?.aborted) {
+                                logDev("Stream processing loop finished due to abort for inData:", currentCallInData);
                                 return;
                             }
-                            // END readChunks
                             setTimeout(
                                 () => {
-                                    if (!abortAble || (abortAble && !signal?.aborted)) { // Only reset if not aborted (or aborting is disabled)
-                                        logDev("reset streamResponseStore")
+                                    if (!abortAble || (abortAble && !localSignal?.aborted)) {
+                                        logDev("Reset streamResponseStore for inData:", currentCallInData)
                                         setStreamResponseStore(() => [])
                                     } else {
-                                        logDev("Stream was aborted, not resetting streamResponseStore via timeout.")
+                                        logDev("Stream was aborted for inData:", currentCallInData, ", not resetting streamResponseStore via timeout.")
                                     }
                                 }, 1000
                             )
                             return;
                         }
                     } else {
-                        if (abortAble && signal?.aborted) {
-                            logDev("Request aborted before reading non-streamed value.");
+                        if (abortAble && localSignal?.aborted) {
+                            logDev("Request aborted before reading non-streamed value for inData:", currentCallInData);
                             return;
                         }
                         const v = await greetingResponse.value()
-                        if (abortAble && signal?.aborted) { // Check after value() resolves
-                            logDev("Request aborted during/after reading non-streamed value.");
+                        if (abortAble && localSignal?.aborted) {
+                            logDev("Request aborted during/after reading non-streamed value for inData:", currentCallInData);
                             return;
                         }
                         setResponse(v)
@@ -336,39 +340,36 @@ export const useGreetingPost = (
                             setGreetingOUTStore(pre => (
                                 {
                                     ...pre,
-                                    [cachedKey(currentInData)]: v
+                                    [cachedKey(currentCallInData)]: v
                                 }
                             ))
                         }
                         logDev("✅", v)
                         return v;
                     }
-                    break; // Added break for clarity, though return exits.
+                    break;
                 case 204:
                     return null;
                 default:
-                    if (abortAble && signal?.aborted) {
-                        logDev("Request aborted before reading error value.");
+                    if (abortAble && localSignal?.aborted) {
+                        logDev("Request aborted before reading error value for inData:", currentCallInData);
                         return;
                     }
                     return await greetingResponse.value();
             }
 
         } catch (e: any) {
-            if (abortAble && (e.name === 'AbortError' || (signal && signal.aborted))) {
-                logDev("Fetch operation aborted:", e.message);
-                // No error toast for user-initiated aborts
-                // Cache is not modified on abort
+            if (abortAble && (e.name === 'AbortError' || (localSignal && localSignal.aborted))) {
+                logDev("Fetch operation aborted for inData:", currentCallInData, "Error:", e.message);
             } else {
                 e = e as ResponseError
                 if (useCachedResponse) {
-                    setGreetingOUTStore(pre => omit(pre, [cachedKey(currentInData)]))
+                    setGreetingOUTStore(pre => omit(pre, [cachedKey(currentCallInData)]))
                 }
                 console.error(e)
                 const {response: errorResponse} = e
                 if (!errorResponse) {
                     errorToast(`no response:`, e.message)
-                    // setLoading(false); // Handled by finally
                     return;
                 }
                 const serror = (await errorResponse?.json())?.error;
@@ -376,14 +377,20 @@ export const useGreetingPost = (
                     `call api \`greetingPost\` error: ${errorResponse.status} (${get(serror, 'status')})`,
                     <pre>{get(serror, 'message')}</pre>
                 )
-                throw e; // Re-throw non-abort errors
+                throw e;
             }
         } finally {
             setLoading(false)
-            if (abortAble) {
-                // Clear the controller for this specific call if it's still the one in the ref
-                if (abortControllerRef.current === currentAbortController) {
+            if (abortAble && localAbortController) {
+                // Nếu AbortController của *request này* vẫn là controller đang active trong ref,
+                // có nghĩa là request này đã hoàn thành (hoặc bị abort) và nó là request cuối cùng set ref.
+                // Vậy nên, dọn dẹp global refs.
+                if (abortControllerRef.current === localAbortController) {
                     abortControllerRef.current = null;
+                    activeRequestInDataRef.current = null;
+                    logDev("Cleared global abort refs for inData:", currentCallInData);
+                } else {
+                    logDev("Global abort refs were for a different/newer request. Not clearing for inData:", currentCallInData);
                 }
             }
             console.groupEnd()
@@ -391,18 +398,17 @@ export const useGreetingPost = (
     }
 
     const abort = useCallback(() => {
-        if (abortAble && abortControllerRef.current) { // <--- Check abortAble
-            logDev("User explicitly called abort().");
+        if (abortAble && abortControllerRef.current) {
+            logDev("User explicitly called abort(). Aborting request with inData:", activeRequestInDataRef.current);
             abortControllerRef.current.abort();
-            // setLoading(false); // Optional: for immediate UI feedback, but finally in fire() handles it.
+            // Khối finally của hàm fire() tương ứng sẽ xử lý việc dọn dẹp abortControllerRef và activeRequestInDataRef
         } else if (!abortAble) {
             logDev("abort() called, but abortAble is false. No action taken.");
         }
-    }, [abortAble]); // <--- Add abortAble to dependencies
+    }, [abortAble]);
 
 
     const OUTComponent = useCallback(
-        // ... (no changes needed here, relies on `loading` and `response` state)
         () => {
             if (!CustomOUTComponent)
                 return null;
@@ -420,7 +426,6 @@ export const useGreetingPost = (
     )
 
     const ResultComponent = useCallback(
-        // ... (no changes needed here)
         () => {
             if (!CustomResultComponent)
                 return null;
@@ -438,7 +443,6 @@ export const useGreetingPost = (
     )
 
     const DataComponent = useCallback(
-        // ... (no changes needed here)
         () => {
             if (!CustomDataComponent)
                 return null;
@@ -456,7 +460,6 @@ export const useGreetingPost = (
     )
 
     const DataItemComponent = useCallback(
-        // ... (no changes needed here)
         () => {
             if (!CustomDataItemComponent)
                 return null;
@@ -489,7 +492,6 @@ export const useGreetingPost = (
                                 return CustomDataItemComponent(item, index)
                             }
                             return (
-                                // use item
                                 <div className={dataItemClassName ?? ""} key={get(item, 'id', `noID-${index}`)}>
                                     {JSON.stringify(item, null, 4)}
                                 </div>
@@ -503,10 +505,9 @@ export const useGreetingPost = (
     )
 
     const cachedResponse = useMemo(() => {
-        // Use _inData for consistency if inData prop is undefined initially
         const keyLookup = _inData !== undefined ? _inData : inData;
         return greetingOUTStore[cachedKey(keyLookup)];
-    }, [greetingOUTStore, _inData, inData]) // Added _inData
+    }, [greetingOUTStore, _inData, inData])
 
     const responseSWR = useMemo(
         () => {
@@ -525,7 +526,7 @@ export const useGreetingPost = (
                 .flatMap(r => get(r, filterPath))
                 .filter(cachedResponseStoreValuesFilter.fn)
         },
-        [greetingOUTStore] // cachedResponseStoreValuesFilter is stable if it's an object from props
+        [greetingOUTStore]
     )
 
     return {
@@ -536,7 +537,7 @@ export const useGreetingPost = (
         isResponseChanged,
         fire,
         postAction: fire,
-        abort, // Expose the abort function
+        abort,
         setInData,
         loading,
         api,
