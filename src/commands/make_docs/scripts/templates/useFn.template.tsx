@@ -53,6 +53,7 @@ interface Props extends ResultDataInnerComponentProps, ApiConfigParamsProps {
         path?: string;
         fn: (item: any) => boolean;
     };
+    abortAble?: boolean; // <--- Thêm prop abortAble
 }
 
 type IGreetingResponseAtom = Record<string, GreetingOUT>;
@@ -80,6 +81,7 @@ export const useGreetingPost = (
         fireIf,
         fireEffectDeps,
         cachedResponseStoreValuesFilter,
+        abortAble = true, // <--- Destructure và đặt giá trị mặc định
     }: Props
 ) => {
     const {api} = useGreetingApi(apiConfigParams, apiConfigOptions);
@@ -158,16 +160,22 @@ export const useGreetingPost = (
     )
 
     const fire = async (inDataParam?: INData) => {
-        // Abort any previous ongoing request
-        if (abortControllerRef.current) {
-            abortControllerRef.current.abort();
-            logDev("Previous request aborted");
+        let currentAbortController: AbortController | null = null;
+        let signal: AbortSignal | undefined = undefined;
+
+        if (abortAble) {
+            // Abort any previous ongoing request
+            if (abortControllerRef.current) {
+                abortControllerRef.current.abort();
+                logDev("Previous request aborted");
+            }
+
+            // Create a new AbortController for this request
+            currentAbortController = new AbortController();
+            abortControllerRef.current = currentAbortController;
+            signal = currentAbortController.signal;
         }
 
-        // Create a new AbortController for this request
-        const currentAbortController = new AbortController();
-        abortControllerRef.current = currentAbortController;
-        const signal = currentAbortController.signal;
 
         let currentInData = inDataParam;
 
@@ -194,7 +202,7 @@ export const useGreetingPost = (
             logDev("🚀", currentInData)
 
             // Check if aborted before making the API call
-            if (signal.aborted) {
+            if (abortAble && signal?.aborted) {
                 logDev("Request aborted before sending.");
                 // setLoading(false); // Handled by finally
                 return;
@@ -208,12 +216,12 @@ export const useGreetingPost = (
                     stream: !!memoStream, // Assuming 'stream' is an API parameter for the endpoint
                 },
                 { // RequestInit options for fetch
-                    signal: signal, // Pass the abort signal
+                    signal: abortAble ? signal : undefined, // Pass the abort signal only if abortAble
                 }
             );
 
             // Check if aborted after receiving headers but before processing body
-            if (signal.aborted) {
+            if (abortAble && signal?.aborted) {
                 logDev("Request aborted after receiving headers.");
                 return;
             }
@@ -233,7 +241,7 @@ export const useGreetingPost = (
                             const readChunk = async () => {
                                 try {
                                     // Check signal before each read
-                                    if (signal.aborted) {
+                                    if (abortAble && signal?.aborted) {
                                         logDev("Stream reading aborted by signal.");
                                         if (typeof reader.cancel === 'function') {
                                             await reader.cancel("Aborted by user");
@@ -243,10 +251,10 @@ export const useGreetingPost = (
 
                                     const {done, value} = await reader.read();
                                     if (done) {
-                                        if (signal.aborted) logDev("Stream finished, but signal was aborted around the same time.");
+                                        if (abortAble && signal?.aborted) logDev("Stream finished, but signal was aborted around the same time.");
                                         return;
                                     }
-                                    if (signal.aborted) { // Check again after value is received
+                                    if (abortAble && signal?.aborted) { // Check again after value is received
                                         logDev("Stream reading aborted by signal after read().");
                                         return;
                                     }
@@ -287,7 +295,7 @@ export const useGreetingPost = (
                                     }
                                     await readChunk();
                                 } catch (e: any) {
-                                    if (e.name === 'AbortError' || signal.aborted) {
+                                    if (abortAble && (e.name === 'AbortError' || signal?.aborted)) {
                                         logDev("Stream reading aborted:", e.message);
                                     } else {
                                         logDev("Error reading stream chunk:", e);
@@ -296,14 +304,14 @@ export const useGreetingPost = (
                             }
 
                             await readChunk()
-                            if (signal.aborted) {
+                            if (abortAble && signal?.aborted) {
                                 logDev("Stream processing loop finished due to abort.");
                                 return;
                             }
                             // END readChunks
                             setTimeout(
                                 () => {
-                                    if (!signal.aborted) { // Only reset if not aborted
+                                    if (!abortAble || (abortAble && !signal?.aborted)) { // Only reset if not aborted (or aborting is disabled)
                                         logDev("reset streamResponseStore")
                                         setStreamResponseStore(() => [])
                                     } else {
@@ -314,12 +322,12 @@ export const useGreetingPost = (
                             return;
                         }
                     } else {
-                        if (signal.aborted) {
+                        if (abortAble && signal?.aborted) {
                             logDev("Request aborted before reading non-streamed value.");
                             return;
                         }
                         const v = await greetingResponse.value()
-                        if (signal.aborted) { // Check after value() resolves
+                        if (abortAble && signal?.aborted) { // Check after value() resolves
                             logDev("Request aborted during/after reading non-streamed value.");
                             return;
                         }
@@ -339,7 +347,7 @@ export const useGreetingPost = (
                 case 204:
                     return null;
                 default:
-                    if (signal.aborted) {
+                    if (abortAble && signal?.aborted) {
                         logDev("Request aborted before reading error value.");
                         return;
                     }
@@ -347,7 +355,7 @@ export const useGreetingPost = (
             }
 
         } catch (e: any) {
-            if (e.name === 'AbortError' || (signal && signal.aborted)) {
+            if (abortAble && (e.name === 'AbortError' || (signal && signal.aborted))) {
                 logDev("Fetch operation aborted:", e.message);
                 // No error toast for user-initiated aborts
                 // Cache is not modified on abort
@@ -372,21 +380,25 @@ export const useGreetingPost = (
             }
         } finally {
             setLoading(false)
-            // Clear the controller for this specific call if it's still the one in the ref
-            if (abortControllerRef.current === currentAbortController) {
-                abortControllerRef.current = null;
+            if (abortAble) {
+                // Clear the controller for this specific call if it's still the one in the ref
+                if (abortControllerRef.current === currentAbortController) {
+                    abortControllerRef.current = null;
+                }
             }
             console.groupEnd()
         }
     }
 
     const abort = useCallback(() => {
-        if (abortControllerRef.current) {
+        if (abortAble && abortControllerRef.current) { // <--- Check abortAble
             logDev("User explicitly called abort().");
             abortControllerRef.current.abort();
             // setLoading(false); // Optional: for immediate UI feedback, but finally in fire() handles it.
+        } else if (!abortAble) {
+            logDev("abort() called, but abortAble is false. No action taken.");
         }
-    }, []);
+    }, [abortAble]); // <--- Add abortAble to dependencies
 
 
     const OUTComponent = useCallback(
@@ -513,7 +525,7 @@ export const useGreetingPost = (
                 .flatMap(r => get(r, filterPath))
                 .filter(cachedResponseStoreValuesFilter.fn)
         },
-        [greetingOUTStore]
+        [greetingOUTStore] // cachedResponseStoreValuesFilter is stable if it's an object from props
     )
 
     return {
