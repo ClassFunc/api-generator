@@ -562,13 +562,13 @@ export const useGreetingPost = (
     const hasMore = useMemo(() => {
         if (!response || !hasMorePath)
             return false;
-        return !!get(response, hasMorePath)
+        return !!get(response, hasMorePath, false);
     }, [response])
 
     const count = useMemo(() => {
         if (!response || !countPath)
             return 0;
-        return get(response, countPath) as number;
+        return get(response, countPath, 0) as number;
     }, [response])
 
     const nextCursor = useMemo(() => {
@@ -580,7 +580,7 @@ export const useGreetingPost = (
     const data = useMemo(() => {
         if (!response || !dataPath)
             return;
-        return get(response, dataPath) as OUTResultMaybeData;
+        return get(response, dataPath, null) as OUTResultMaybeData;
     }, [response])
 
     const cachedDataList = useMemo(() => {
