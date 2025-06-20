@@ -1,7 +1,7 @@
 // @ts-nocheck
 import React, {useCallback, useEffect, useMemo, useRef, useState} from "react";
 import useGreetingApi from "./useGreetingApi"
-import {get, isEqual, isPlainObject, omit} from 'lodash'
+import {flatten, get, isEqual, isPlainObject, omit, uniqBy, values} from 'lodash'
 
 import {GreetingIN, GreetingOUT, ResponseError} from "../"
 import {atom, useAtom, useAtomValue} from "jotai";
@@ -54,6 +54,9 @@ interface Props extends ResultDataInnerComponentProps, ApiConfigParamsProps {
         fn: (item: any) => boolean;
     };
     abortAble?: boolean;
+    hasMorePath?: string;
+    nextCursorPath?: string;
+    dataPath?: string;
 }
 
 type IGreetingResponseAtom = Record<string, GreetingOUT>;
@@ -82,10 +85,14 @@ export const useGreetingPost = (
         fireEffectDeps,
         cachedResponseStoreValuesFilter,
         abortAble = true,
+        hasMorePath = 'result.hasMore',
+        nextCursorPath = 'result.nextCursor',
+        countPath = 'result.count',
+        dataPath = 'result.data',
     }: Props
 ) => {
     const {api} = useGreetingApi(apiConfigParams, apiConfigOptions);
-    const [_inData, setInData] = useAtom<INData | undefined>(useDeepCompareMemo(()=>atom(inData),[inData]));
+    const [_inData, setInData] = useAtom<INData | undefined>(useDeepCompareMemo(() => atom(inData), [inData]));
     const [response, setResponse] = useAtom<GreetingOUT>(lastGreetingOUTAtom)
     const resetResponse = useResetAtom(lastGreetingOUTAtom)
     const [streamResponseStore, setStreamResponseStore] = useState<any[]>([])
@@ -363,7 +370,8 @@ export const useGreetingPost = (
                         setGreetingOUTStore(pre => omit(pre, [cachedKey(currentCallInData)]));
                         // Hoặc: setGreetingOUTStore(pre => ({ ...pre, [cachedKey(currentCallInData)]: errorValue as GreetingOUT }));
                     }
-                    errorToast(`API Error ${greetingResponse.raw.status} for /greeting`, <pre>{JSON.stringify(errorValue, null, 2)}</pre>);
+                    errorToast(`API Error ${greetingResponse.raw.status} for /greeting`,
+                        <pre>{JSON.stringify(errorValue, null, 2)}</pre>);
                     logDev("❌ API Error:", errorValue);
                     return errorValue; // Trả về lỗi để bên gọi có thể xử lý nếu cần
             }
@@ -551,6 +559,45 @@ export const useGreetingPost = (
         [greetingOUTStore]
     )
 
+    const hasMore = useMemo(() => {
+        if (!response || !hasMorePath)
+            return false;
+        return !!get(response, hasMorePath)
+    }, [response])
+
+    const count = useMemo(() => {
+        if (!response || !countPath)
+            return 0;
+        return get(response, countPath) as number;
+    }, [response])
+
+    const nextCursor = useMemo(() => {
+        if (!response || !nextCursorPath)
+            return '';
+        return get(response, nextCursorPath, '') as string;
+    }, [response])
+
+    const data = useMemo(() => {
+        if (!response || !dataPath)
+            return;
+        return get(response, dataPath) as OUTResultMaybeData;
+    }, [response])
+
+    const cachedDataList = useMemo(() => {
+        if (!dataPath) {
+            return [];
+        }
+        return uniqBy(
+            flatten(
+                values(greetingOUTStore)
+                    .map(
+                        response => get(response, dataPath) as OUTResultMaybeData
+                    )
+            )
+            , 'id'
+        ) as OUTResultMaybeDataItem[]
+    }, [greetingOUTStore])
+
     return {
         response,
         responseSWR,
@@ -571,6 +618,11 @@ export const useGreetingPost = (
         DataComponent,
         ResultComponent,
         OUTComponent,
-        cachedKey
+        cachedKey,
+        hasMore,
+        nextCursor,
+        count,
+        data,
+        cachedDataList,
     }
 }
