@@ -1,7 +1,7 @@
 // @ts-nocheck
 import React, {useCallback, useEffect, useMemo, useRef, useState} from "react";
 import useGreetingApi from "./useGreetingApi"
-import {flatten, get, isEqual, isPlainObject, omit, uniqBy, values} from 'lodash'
+import {flatten, get, isEqual, isPlainObject, omit, uniqBy} from 'lodash'
 
 import {GreetingIN, GreetingOUT, ResponseError} from "../"
 import {atom, useAtom, useAtomValue} from "jotai";
@@ -15,6 +15,7 @@ import {
     useDeepCompareMemo,
     usePrevious
 } from "./_useFnCommon";
+import {InfinityScrollHereComponent} from "./InfinityScrollHereComponent";
 
 type INData = Unpacked<GreetingIN['data']>
 type OUTResult = Unpacked<GreetingOUT['result']>
@@ -59,6 +60,7 @@ interface Props extends ResultDataInnerComponentProps, ApiConfigParamsProps {
     dataPath?: string;
     dataUniqByPath?: string;
     cachedDataListFilter?: string | Record<string, any>;
+    useInfinityScroll?: boolean;
 }
 
 type IGreetingResponseAtom = Record<string, GreetingOUT>;
@@ -93,6 +95,7 @@ export const useGreetingPost = (
         dataPath = 'result.data',
         dataUniqByPath = 'id',
         cachedDataListFilter = 'id',
+        useInfinityScroll = false
     }: Props
 ) => {
     const {api} = useGreetingApi(apiConfigParams, apiConfigOptions);
@@ -622,6 +625,48 @@ export const useGreetingPost = (
         return result;
     }, [greetingOUTStore])
 
+    const InfinityScrollHere = useCallback(
+        ({
+             lastElementSelector = {
+                 data: cachedDataList,
+                 cssDataPathMap: {id: "id"},
+             },
+             scrollTo = "bottom",
+             scrollIntoViewOptions = true, //{behavior: 'instant', block: 'start'}
+             triggerElementHeight = 1,//px
+             intersectionObserverOptions = {},
+             loadMoreHandler,
+             viewportRef,
+         }) => {
+
+            if (!useInfinityScroll) {
+                return;
+            }
+
+            if (!lastElementSelector.data) {
+                lastElementSelector.data = cachedDataList;
+            }
+            return (
+                <InfinityScrollHereComponent
+                    lastElementSelector={lastElementSelector}
+                    scrollTo={scrollTo}
+                    loadMoreHandler={loadMoreHandler || fire}
+                    viewportRef={viewportRef}
+                    scrollIntoViewOptions={scrollIntoViewOptions}
+                    triggerElementHeight={triggerElementHeight}
+                    intersectionObserverOptions={intersectionObserverOptions}
+                    isLoading={loading}
+                    hasMore={hasMore}
+                />
+            )
+        },
+        [
+            loading,
+            hasMore,
+            cachedDataList,
+        ]
+    )
+
     return {
         response,
         responseSWR,
@@ -648,5 +693,6 @@ export const useGreetingPost = (
         count,
         data,
         cachedDataList,
+        InfinityScrollHere,
     }
 }

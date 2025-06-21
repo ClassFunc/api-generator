@@ -28,6 +28,10 @@ fs.copyFileSync(
     path.resolve(templatesDir, `_useFnCommon.ts`),
     path.resolve(usesDir, `_useFnCommon.ts`),
 )
+fs.copyFileSync(
+    path.resolve(templatesDir, `InfinityScrollHereComponent.tsx`),
+    path.resolve(usesDir, `InfinityScrollHereComponent.tsx`),
+)
 const useApiTemplateContent = fs
     .readFileSync(path.resolve(templatesDir, "useXYZApi.template.ts"))
     .toString("utf-8")
