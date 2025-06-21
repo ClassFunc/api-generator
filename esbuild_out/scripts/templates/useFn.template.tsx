@@ -15,7 +15,7 @@ import {
     useDeepCompareMemo,
     usePrevious
 } from "./_useFnCommon";
-import {InfinityScrollHereComponent} from "./InfinityScrollHereComponent";
+import {InfinityScrollHereComponent, lastElementSelectorProps} from "./InfinityScrollHereComponent";
 
 type INData = Unpacked<GreetingIN['data']>
 type OUTResult = Unpacked<GreetingOUT['result']>
@@ -630,7 +630,7 @@ export const useGreetingPost = (
              lastElementSelector = {
                  data: cachedDataList,
                  cssDataPathMap: {id: "id"},
-             },
+             } as lastElementSelectorProps,
              scrollTo = "bottom",
              scrollIntoViewOptions = true, //{behavior: 'instant', block: 'start'}
              triggerElementHeight = 1,//px
