@@ -57,6 +57,8 @@ interface Props extends ResultDataInnerComponentProps, ApiConfigParamsProps {
     hasMorePath?: string;
     nextCursorPath?: string;
     dataPath?: string;
+    dataUniqByPath?: string;
+    cachedDataListFilter?: string | Record<string, any>;
 }
 
 type IGreetingResponseAtom = Record<string, GreetingOUT>;
@@ -89,6 +91,8 @@ export const useGreetingPost = (
         nextCursorPath = 'result.nextCursor',
         countPath = 'result.count',
         dataPath = 'result.data',
+        dataUniqByPath = 'id',
+        cachedDataListFilter = 'id',
     }: Props
 ) => {
     const {api} = useGreetingApi(apiConfigParams, apiConfigOptions);
@@ -587,15 +591,35 @@ export const useGreetingPost = (
         if (!dataPath) {
             return [];
         }
-        return uniqBy(
+        const storeValues = Object.values(greetingOUTStore);
+        if (!storeValues.length) {
+            return []
+        }
+        let result = uniqBy(
             flatten(
-                values(greetingOUTStore)
-                    .map(
-                        response => get(response, dataPath) as OUTResultMaybeData
-                    )
-            )
-            , 'id'
+                storeValues.map(
+                    response => get(response, dataPath) as OUTResultMaybeData
+                )
+            ),
+            dataUniqByPath,
         ) as OUTResultMaybeDataItem[]
+
+        if (!cachedDataListFilter || typeof cachedDataListFilter === 'string') {
+            cachedDataListFilter = {id: cachedDataListFilter || ''};
+        }
+        Object.entries(
+            cachedDataListFilter as Record<string, any>,
+            (([dataKey, compareValue]) => {
+                result = result.filter(item => {
+                    const itemValue = get(item, dataKey);
+                    if (isEqual(itemValue, compareValue)) {
+                        return true;
+                    }
+                })
+            })
+        )
+
+        return result;
     }, [greetingOUTStore])
 
     return {
