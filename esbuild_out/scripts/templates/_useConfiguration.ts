@@ -1,5 +1,5 @@
-// @ts-nocheck
 import {useEffect, useState} from "react";
+// @ts-ignore
 import {Configuration, ConfigurationParameters} from "../";
 import {getAuth} from 'firebase/auth'
 

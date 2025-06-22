@@ -1,4 +1,4 @@
-import React, {useCallback, useEffect, useMemo, useRef, useState} from "react";
+import React, {ReactNode, useCallback, useEffect, useMemo, useRef, useState} from "react";
 // @ts-ignore
 import useGreetingApi from "./useGreetingApi"
 import {filter, flatten, get, isEqual, isObject, isPlainObject, Many, omit, orderBy, uniqBy} from 'lodash'
@@ -17,6 +17,9 @@ import {
     usePrevious
 } from "./_useFnCommon";
 import {InfinityScrollHereComponent, InfinityScrollHereProps} from "./InfinityScrollHereComponent";
+import VerticalElementScroll from "./InfiniteScrollers/VerticalElementScroll";
+import ReverseVerticalElementScroll from "./InfiniteScrollers/ReverseVerticalElementScroll";
+import ReverseHorizontalElementScroll from "./InfiniteScrollers/ReverseHorizontalElementScroll";
 
 type INData = Unpacked<GreetingIN['data']>
 type OUT = GreetingOUT;
@@ -28,7 +31,7 @@ export type OUTResultMaybeData = OUTResult extends { data: infer U }
     : OUTResult
 export type OUTResultMaybeDataItem = Unpacked<OUTResultMaybeData>
 type Data = OUTResultMaybeData;
-type Item = OUTResultMaybeDataItem;
+export type Item = OUTResultMaybeDataItem;
 
 function valueOfOUTResultMaybeData(result: unknown): OUTResultMaybeData | OUTResult | null {
     if (!result)
@@ -56,6 +59,13 @@ type DataListConfig = {
     uniqBy?: keyof Item | string;
 }
 
+type InfiniteScrollerConfig = {
+    ItemComponent: (item: Item, index: number) => ReactNode;
+    onLoadMore: () => void;
+    scrollTo?: "bottom" | "top" | "right" | "left";
+    rootMargin?: IntersectionObserverInit['rootMargin'];
+    rootClassName?: string;
+}
 interface Props extends ResultDataInnerComponentProps, ApiConfigParamsProps {
     inData?: INData;
     stream?: boolean;
@@ -641,7 +651,7 @@ export const useGreetingPost = (
         }
         const responseValues = Object.values(greetingOUTStore);
         if (!responseValues.length) {
-            return []
+            return [];
         }
         let data = flatten(
             responseValues.map(
@@ -715,6 +725,51 @@ export const useGreetingPost = (
         ]
     )
 
+    const InfiniteScroller = useCallback(
+        (
+            {
+                ItemComponent,
+                scrollTo,
+                rootMargin,
+                rootClassName,
+                onLoadMore,
+            }: InfiniteScrollerConfig
+        ) => {
+
+            if (!useInfinityScroll) {
+                return null;
+            }
+
+            const commonParams = {
+                items: cachedDataList,
+                hasNextPage: hasMore,
+                loading,
+                //
+                onLoadMore: onLoadMore || fire,
+                rootMargin,
+                className: rootClassName,
+                ItemComponent,
+            }
+            switch (scrollTo) {
+                case "bottom":
+                case "right":
+                    return VerticalElementScroll(commonParams)
+                case "top":
+                    return ReverseVerticalElementScroll(commonParams)
+                case "left":
+                    return ReverseHorizontalElementScroll(commonParams)
+                default:
+                    return VerticalElementScroll(commonParams)
+            }
+        },
+        [
+            cachedDataList,
+            hasMore,
+            loading,
+            useInfinityScroll
+        ]
+    )
+
     return {
         response,
         responseSWR,
@@ -743,5 +798,6 @@ export const useGreetingPost = (
         cachedDataList,
         dataList: cachedDataList,
         InfinityScrollHere,
+        InfiniteScroller,
     }
 }

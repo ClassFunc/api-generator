@@ -32,6 +32,26 @@ fs.copyFileSync(
     path.resolve(templatesDir, `InfinityScrollHereComponent.tsx`),
     path.resolve(usesDir, `InfinityScrollHereComponent.tsx`),
 )
+fs.mkdirSync(
+    path.resolve(usesDir, `InfiniteScrollers`),
+    {recursive: true},
+)
+fs.copyFileSync(
+    path.resolve(templatesDir, `InfiniteScrollers/Loading.tsx`),
+    path.resolve(usesDir, `InfiniteScrollers/Loading.tsx`),
+)
+fs.copyFileSync(
+    path.resolve(templatesDir, `InfiniteScrollers/ReverseHorizontalElementScroll.tsx`),
+    path.resolve(usesDir, `InfiniteScrollers/ReverseHorizontalElementScroll.tsx`),
+)
+fs.copyFileSync(
+    path.resolve(templatesDir, `InfiniteScrollers/ReverseVerticalElementScroll.tsx`),
+    path.resolve(usesDir, `InfiniteScrollers/ReverseVerticalElementScroll.tsx`),
+)
+fs.copyFileSync(
+    path.resolve(templatesDir, `InfiniteScrollers/VerticalElementScroll.tsx`),
+    path.resolve(usesDir, `InfiniteScrollers/VerticalElementScroll.tsx`),
+)
 const useApiTemplateContent = fs
     .readFileSync(path.resolve(templatesDir, "useXYZApi.template.ts"))
     .toString("utf-8")
