@@ -12,12 +12,14 @@ export default function VerticalElementScroll(
         ItemComponent,
         loading,
         onLoadMore,
-        rootMargin
+        rootMargin,
+        noRoot = true,
     }: UseInfiniteScrollHookArgs &
         {
             items: Item[];
             className?: string;
             ItemComponent: (item: Item, index: number) => React.ReactNode;
+            noRoot?: boolean;
         }
 ): React.ReactNode {
 
@@ -47,7 +49,7 @@ export default function VerticalElementScroll(
         </>
     );
 
-    if (rootRef) return (
+    if (!noRoot) return (
         <div
             ref={rootRef}
             className={className}
@@ -62,4 +64,4 @@ export default function VerticalElementScroll(
     );
 }
 
-    export const VerticalElementScrollMemo = React.memo(VerticalElementScroll);
+export const VerticalElementScrollMemo = React.memo(VerticalElementScroll);

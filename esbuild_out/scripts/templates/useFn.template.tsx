@@ -20,6 +20,7 @@ import {InfinityScrollHereComponent, InfinityScrollHereProps} from "./InfinitySc
 import {VerticalElementScrollMemo} from "./InfiniteScrollers/VerticalElementScroll";
 import {ReverseVerticalElementScrollMemo} from "./InfiniteScrollers/ReverseVerticalElementScroll";
 import {ReverseHorizontalElementScrollMemo} from "./InfiniteScrollers/ReverseHorizontalElementScroll";
+import useInfiniteScroll from "react-infinite-scroll-hook";
 
 type INData = Unpacked<GreetingIN['data']>
 type OUT = GreetingOUT;
@@ -65,6 +66,7 @@ type InfiniteScrollerConfig = {
     scrollTo?: "bottom" | "top" | "right" | "left";
     rootMargin?: IntersectionObserverInit['rootMargin'];
     rootClassName?: string;
+    noRoot?: boolean;
 }
 interface Props extends ResultDataInnerComponentProps, ApiConfigParamsProps {
     inData?: INData;
@@ -725,6 +727,40 @@ export const useGreetingPost = (
         ]
     )
 
+
+    const loadMoreHandler = useCallback(() => {
+        if (loading || !hasMore) {
+            return;
+        }
+        if (!nextCursor) {
+            logDev("`nextCursor` is not available. Cannot load more.");
+            return;
+        }
+
+        // Tạo inData mới cho lần gọi tiếp theo bằng cách thêm/cập nhật nextCursor
+        const newInData = {
+            ..._inData,
+            [nextCursorPath]: nextCursor,
+        };
+
+        logDev("Loading more with new inData:", newInData);
+        fire(newInData as INData);
+
+    }, [loading, hasMore, nextCursor, _inData, fire]);
+
+    const [infiniteRef, {rootRef: infiniteRootRef}] = useInfiniteScroll({
+        loading,
+        hasNextPage: hasMore,
+        onLoadMore: loadMoreHandler,
+        // When there is an error, we stop infinite loading.
+        // It can be reactivated by setting "error" state as undefined.
+        disabled: Boolean(loading || !hasMore),
+        // `rootMargin` is passed to `IntersectionObserver`.
+        // We can use it to trigger 'onLoadMore' when the sentry comes near to become
+        // visible, instead of becoming fully visible on the screen.
+        // rootMargin: rootMargin,
+    });
+
     const InfiniteScroller = useCallback(
         (
             {
@@ -733,6 +769,7 @@ export const useGreetingPost = (
                 rootMargin,
                 rootClassName,
                 onLoadMore,
+                noRoot = true
             }: InfiniteScrollerConfig
         ) => {
 
@@ -749,6 +786,7 @@ export const useGreetingPost = (
                 rootMargin,
                 className: rootClassName,
                 ItemComponent,
+                noRoot,
             }
             switch (scrollTo) {
                 case "bottom":
@@ -807,5 +845,7 @@ export const useGreetingPost = (
         dataList: cachedDataList,
         InfinityScrollHere,
         InfiniteScroller,
+        infiniteRef,
+        infiniteRootRef,
     }
 }
