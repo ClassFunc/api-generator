@@ -1,7 +1,7 @@
 import React, {ReactNode, useCallback, useEffect, useMemo, useRef, useState} from "react";
 // @ts-ignore
 import useGreetingApi from "./useGreetingApi"
-import {filter, flatten, get, isEqual, isObject, isPlainObject, Many, omit, orderBy, uniqBy} from 'lodash'
+import {filter, flatten, get, isEqual, isObject, isPlainObject, Many, merge, omit, orderBy, uniqBy} from 'lodash'
 // @ts-ignore
 import {GreetingIN, GreetingOUT, ResponseError} from "../"
 import {atom, useAtom, useAtomValue} from "jotai";
@@ -17,10 +17,8 @@ import {
     usePrevious
 } from "./_useFnCommon";
 import {InfinityScrollHereComponent, InfinityScrollHereProps} from "./InfinityScrollHereComponent";
-import {VerticalElementScrollMemo} from "./InfiniteScrollers/VerticalElementScroll";
-import {ReverseVerticalElementScrollMemo} from "./InfiniteScrollers/ReverseVerticalElementScroll";
-import {ReverseHorizontalElementScrollMemo} from "./InfiniteScrollers/ReverseHorizontalElementScroll";
 import useInfiniteScroll from "react-infinite-scroll-hook";
+import {InfinityLoading} from "./InfinityLoading";
 
 type INData = Unpacked<GreetingIN['data']>
 type OUT = GreetingOUT;
@@ -685,6 +683,7 @@ export const useGreetingPost = (
         return data;
     }, [greetingOUTStore])
 
+    /* @deprecated */
     const InfinityScrollHere = useCallback(
         ({
              loadMoreHandler,
@@ -738,10 +737,12 @@ export const useGreetingPost = (
         }
 
         // Tạo inData mới cho lần gọi tiếp theo bằng cách thêm/cập nhật nextCursor
-        const newInData = {
-            ..._inData,
-            [nextCursorPath]: nextCursor,
-        };
+        const newInData = merge(
+            _inData,
+            {
+                [nextCursorPath]: nextCursor
+            },
+        );
 
         logDev("Loading more with new inData:", newInData);
         fire(newInData as INData);
@@ -761,60 +762,18 @@ export const useGreetingPost = (
         // rootMargin: rootMargin,
     });
 
-    const InfiniteScroller = useCallback(
-        (
-            {
-                ItemComponent,
-                scrollTo,
-                rootMargin,
-                rootClassName,
-                onLoadMore,
-                noRoot = true
-            }: InfiniteScrollerConfig
-        ) => {
-
-            if (!useInfinityScroll) {
-                return null;
-            }
-
-            const commonParams = {
-                items: cachedDataList,
-                hasNextPage: hasMore,
-                loading,
-                //
-                onLoadMore: onLoadMore || fire,
-                rootMargin,
-                className: rootClassName,
-                ItemComponent,
-                noRoot,
-            }
-            switch (scrollTo) {
-                case "bottom":
-                case "right":
-                    // Sử dụng component đã được memoize với cú pháp JSX
-                    return <VerticalElementScrollMemo {...commonParams} />;
-                case "top":
-                    return <ReverseVerticalElementScrollMemo {...commonParams}/>
-                case "left":
-                    return <ReverseHorizontalElementScrollMemo {...commonParams}/>
-                default:
-                    return <VerticalElementScrollMemo {...commonParams} />;
-            }
+    const InfiniteLoading = useCallback(
+        () => {
+            return hasMore && (
+                <div ref={infiniteRef} style={{height: '1px', marginTop: '1px'}} aria-hidden="true">
+                    <InfinityLoading/>
+                </div>
+            )
         },
         [
-            cachedDataList,
-            hasMore,
-            loading,
-            useInfinityScroll
+            hasMore
         ]
     )
-
-    // const VerticalElementScrollMemo = useCallback(
-    //     (commonParams: any) => {
-    //         return VerticalElementScroll(commonParams)
-    //     },
-    //     []
-    // )
 
     return {
         response,
@@ -844,8 +803,8 @@ export const useGreetingPost = (
         cachedDataList,
         dataList: cachedDataList,
         InfinityScrollHere,
-        InfiniteScroller,
         infiniteRef,
         infiniteRootRef,
+        InfiniteLoading,
     }
 }
