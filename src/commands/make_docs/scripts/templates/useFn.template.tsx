@@ -1,4 +1,4 @@
-import React, {ReactNode, useCallback, useEffect, useMemo, useRef, useState} from "react";
+import React, {ReactNode, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState} from "react";
 // @ts-ignore
 import useGreetingApi from "./useGreetingApi"
 import {filter, flatten, get, isEqual, isObject, isPlainObject, Many, merge, omit, orderBy, uniqBy} from 'lodash'
@@ -66,6 +66,7 @@ type InfiniteScrollerConfig = {
     rootClassName?: string;
     noRoot?: boolean;
 }
+
 interface Props extends ResultDataInnerComponentProps, ApiConfigParamsProps {
     inData?: INData;
     stream?: boolean;
@@ -724,7 +725,7 @@ export const useGreetingPost = (
         ]
     )
 
-
+    /* Scroll Region */
     const loadMoreHandler = useCallback(() => {
         if (loading || !hasMore) {
             return;
@@ -747,6 +748,9 @@ export const useGreetingPost = (
 
     }, [loading, hasMore, nextCursor, _inData, fire]);
 
+    const scrollableRootRef = useRef<React.ComponentRef<'div'> | null>(null);
+    const lastScrollDistanceToBottomRef = useRef<number>(0);
+
     const [infiniteRef, {rootRef: infiniteRootRef}] = useInfiniteScroll({
         loading,
         hasNextPage: hasMore,
@@ -760,6 +764,65 @@ export const useGreetingPost = (
         // rootMargin: rootMargin,
     });
 
+    // We keep the scroll position when new items are added etc.
+    useLayoutEffect(() => {
+        const lastScrollDistanceToBottom = lastScrollDistanceToBottomRef.current;
+        console.log({lastScrollDistanceToBottom})
+
+        if (scrollableRootRef.current) {
+            const {
+                scrollHeight,
+                scrollTop
+            } = scrollableRootRef.current;
+            console.log("❌ CURRENT root scroll:", {
+                scrollHeight,
+                scrollTop
+            })
+            const newRootScrollTop = scrollHeight - lastScrollDistanceToBottom;
+            console.log("✅ NEW root scroll", {newRootScrollTop});
+            if (newRootScrollTop > 0)
+                scrollableRootRef.current.scrollTop = newRootScrollTop;
+        } else {
+            const scrollTop = document.body.scrollHeight - lastScrollDistanceToBottom
+            console.log("window scroll top:", scrollTop)
+            document.documentElement.scrollTop = scrollTop;
+        }
+    }, [cachedDataList, infiniteRootRef]);
+
+    const rootRefSetter = useCallback(
+        (node: HTMLDivElement) => {
+            infiniteRootRef(node);
+            scrollableRootRef.current = node;
+        },
+        [infiniteRootRef],
+    );
+
+    const handleRootScroll = useCallback(() => {
+        const rootNode = scrollableRootRef.current || document.documentElement;
+        if (rootNode) {
+            lastScrollDistanceToBottomRef.current = rootNode.scrollHeight - rootNode.scrollTop;
+        } else {
+            lastScrollDistanceToBottomRef.current = document.documentElement.scrollHeight - document.documentElement.scrollTop;
+        }
+    }, [scrollableRootRef]);
+
+    useEffect(() => {
+        let handleScroll;
+        if (!scrollableRootRef.current) {
+            const handleScroll = () => {
+                const windowRootNode = document.documentElement;
+                lastScrollDistanceToBottomRef.current = windowRootNode.scrollHeight - windowRootNode.scrollTop;
+                console.log("window scroll distance:", lastScrollDistanceToBottomRef.current)
+            }
+            window.addEventListener('scroll', handleScroll);
+        }
+        return () => {
+            if (!scrollableRootRef.current && handleScroll) {
+                window.removeEventListener('scroll', handleScroll);
+            }
+        };
+    }, [scrollableRootRef]);
+
     const InfiniteLoading = useCallback(
         () => {
             return hasMore && (
@@ -772,6 +835,8 @@ export const useGreetingPost = (
             hasMore
         ]
     )
+
+    /* END Scroll Region */
 
     return {
         response,
@@ -804,5 +869,7 @@ export const useGreetingPost = (
         infiniteRef,
         infiniteRootRef,
         InfiniteLoading,
+        rootRefSetter,
+        handleRootScroll,
     }
 }
