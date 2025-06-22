@@ -138,6 +138,7 @@ export const useGreetingPost = (
     const abortControllerRef = useRef<AbortController | null>(null);
     // Ref để lưu trữ inData của request đang được theo dõi bởi abortControllerRef
     const activeRequestInDataRef = useRef<INData | undefined | null>(null);
+    const [_fireImmediately, setFireImmediately] = useState<boolean>(fireImmediately);
 
 
     const memoStream = useAtomValue(
@@ -157,6 +158,7 @@ export const useGreetingPost = (
             }, [fireEffectDeps, prevFireEffectDepsAtom]
         )
     )
+
     useEffect(() => {
         if (!api)
             return;
@@ -175,16 +177,12 @@ export const useGreetingPost = (
             if (!api)
                 return;
 
-            if (_inData && typeof fireImmediately === "undefined") {
+            if (_inData && (typeof _fireImmediately === "undefined" || _fireImmediately)) {
                 fire(_inData).then()
-                return;
-            }
-
-            if (fireImmediately) {
-                fire(_inData).then()
+                setFireImmediately(false);
             }
         },
-        [fireImmediately, api, _inData]
+        [_fireImmediately, api, _inData]
     )
 
     const isResponseChanged = useMemo(
