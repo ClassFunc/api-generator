@@ -1,28 +1,34 @@
-// @ts-nocheck
-import React, {useCallback, useEffect, useMemo, useRef, useState} from "react"; // Added useRef
+import React, {useCallback, useEffect, useMemo, useRef, useState} from "react";
+// @ts-ignore
 import useGreetingApi from "./useGreetingApi"
-import {get, isEqual, isPlainObject, merge, omit} from 'lodash'
-
+import {filter, flatten, get, isEqual, isObject, isPlainObject, Many, omit, orderBy, uniqBy} from 'lodash'
+// @ts-ignore
 import {GreetingIN, GreetingOUT, ResponseError} from "../"
 import {atom, useAtom, useAtomValue} from "jotai";
-import {useResetAtom} from "jotai/utils";
+import {useResetAtom} from "jotai/utils"; // Đảm bảo đã import
 import {
     ApiConfigParamsProps,
     errorToast,
     logDev,
+    transformDotKeyObjectToRawObject,
     trimDataOnStream,
-    unflattenObject,
     Unpacked,
     useDeepCompareMemo,
     usePrevious
 } from "./_useFnCommon";
+import {InfinityScrollHereComponent, InfinityScrollHereProps} from "./InfinityScrollHereComponent";
 
 type INData = Unpacked<GreetingIN['data']>
+type OUT = GreetingOUT;
 type OUTResult = Unpacked<GreetingOUT['result']>
+type Result = OUTResult;
+
 export type OUTResultMaybeData = OUTResult extends { data: infer U }
-    ? U // If 'data' exists, extract its type (U)
-    : OUTResult // If 'data' doesn't exist, use the 'result' type itself
+    ? U
+    : OUTResult
 export type OUTResultMaybeDataItem = Unpacked<OUTResultMaybeData>
+type Data = OUTResultMaybeData;
+type Item = OUTResultMaybeDataItem;
 
 function valueOfOUTResultMaybeData(result: unknown): OUTResultMaybeData | OUTResult | null {
     if (!result)
@@ -41,27 +47,13 @@ interface ResultDataInnerComponentProps {
     EmptyComponent?: () => React.ReactNode;
 }
 
-interface InfinityScrollConfigProps {
-    dataFilterFn: (item: OUTResultMaybeDataItem) => boolean;
-    scrollRootRef?: React.RefObject<HTMLDivElement | null> | null;
-    dataPath?: string;
-    nextCursorPath?: string;
-    fireNextCursorPath?: string;
-    hasMorePath?: string;
-    observerConfig?: Omit<IntersectionObserverInit, 'root'>;
-}
-
-const infinityScrollDefault: InfinityScrollConfigProps = {
-    dataFilterFn: Boolean,
-    scrollRootRef: null,
-    dataPath: `result.data`,
-    nextCursorPath: `result.nextCursor`,
-    fireNextCursorPath: `nextCursor`,
-    hasMorePath: `result.hasMore`,
-    observerConfig: {
-        threshold: 0.1,
-        rootMargin: "0px 0px 200px 0px"
-    }
+type DataListConfig = {
+    orderBy?: {
+        iteratees: Many<keyof Item | ((value: Item) => any)>,
+        orders?: Many<'asc' | 'desc'>
+    };
+    filter?: Record<keyof Item | string, any> | ((value: Item) => boolean) | string;
+    uniqBy?: keyof Item | string;
 }
 
 interface Props extends ResultDataInnerComponentProps, ApiConfigParamsProps {
@@ -72,7 +64,18 @@ interface Props extends ResultDataInnerComponentProps, ApiConfigParamsProps {
     useCachedResponse?: boolean;
     fireIf?: (data?: INData) => boolean;
     fireEffectDeps?: Array<any>;
-    infinityScrollConfig?: InfinityScrollConfigProps;
+    cachedResponseStoreValuesFilter?: {
+        path?: string;
+        fn: (item: any) => boolean;
+    };
+    abortAble?: boolean;
+    hasMorePath?: keyof Result | string;
+    nextCursorPath?: keyof Result | string;
+    countPath?: keyof Result | string;
+    dataPath?: keyof Result | string;
+    cachedDataListFilter?: string | Record<string, any>;
+    useInfinityScroll?: boolean;
+    dataListConfig?: DataListConfig;
 }
 
 type IGreetingResponseAtom = Record<string, GreetingOUT>;
@@ -99,30 +102,33 @@ export const useGreetingPost = (
         useCachedResponse = true,
         fireIf,
         fireEffectDeps,
-        infinityScrollConfig,
+        cachedResponseStoreValuesFilter,
+        abortAble = true,
+        hasMorePath = 'hasMore',
+        nextCursorPath = 'nextCursor',
+        countPath = 'count',
+        dataPath = 'data',
+        useInfinityScroll = false,
+        dataListConfig = {uniqBy: "id"},
     }: Props
 ) => {
     const {api} = useGreetingApi(apiConfigParams, apiConfigOptions);
-    const [_inData, setInData] = useAtom<INData | undefined>(
-        useDeepCompareMemo(
-            () => atom(inData),
-            [inData]
-        )
-    );
+    const [_inData, setInData] = useAtom<INData | undefined>(useDeepCompareMemo(() => atom(inData), [inData]));
+    // @ts-ignore
     const [response, setResponse] = useAtom<GreetingOUT>(lastGreetingOUTAtom)
+    // @ts-ignore
     const resetResponse = useResetAtom(lastGreetingOUTAtom)
     const [streamResponseStore, setStreamResponseStore] = useState<any[]>([])
     const [greetingOUTStore, setGreetingOUTStore] = useAtom(greetingOUTStoreAtom)
+    // @ts-ignore
+    const resetGreetingOUTStore = useResetAtom(greetingOUTStoreAtom); // <--- Thêm dòng này
     const [loading, setLoading] = useState<boolean>(false)
     const prevResponse = usePrevious(response);
-    const abortControllerRef = useRef<AbortController | null>(null); // For aborting requests
 
-    const _infScrollConfig = useAtomValue<InfinityScrollConfigProps | null>(
-        useDeepCompareMemo(
-            () => atom(infinityScrollConfig),
-            [infinityScrollConfig]
-        )
-    )
+    const abortControllerRef = useRef<AbortController | null>(null);
+    // Ref để lưu trữ inData của request đang được theo dõi bởi abortControllerRef
+    const activeRequestInDataRef = useRef<INData | undefined | null>(null);
+
 
     const memoStream = useAtomValue(
         useMemo(
@@ -159,7 +165,6 @@ export const useGreetingPost = (
             if (!api)
                 return;
 
-            // automatically fire if _inData is set.
             if (_inData && typeof fireImmediately === "undefined") {
                 fire(_inData).then()
                 return;
@@ -169,7 +174,7 @@ export const useGreetingPost = (
                 fire(_inData).then()
             }
         },
-        [fireImmediately, api, _inData] // fire should not be in dependencies to avoid re-triggering
+        [fireImmediately, api, _inData]
     )
 
     const isResponseChanged = useMemo(
@@ -189,18 +194,27 @@ export const useGreetingPost = (
     )
 
     const fire = async (inDataParam?: INData) => {
-        // Abort any previous ongoing request
-        if (abortControllerRef.current) {
-            abortControllerRef.current.abort();
-            logDev("Previous request aborted");
+        const currentCallInData: INData | undefined = inDataParam ?? _inData;
+
+        let localAbortController: AbortController | null = null;
+        let localSignal: AbortSignal | undefined = undefined;
+
+        if (abortAble) {
+            // Kiểm tra nếu có request đang active và inData của nó giống với request hiện tại
+            if (abortControllerRef.current && isEqual(activeRequestInDataRef.current, currentCallInData)) {
+                logDev("Aborting previous request with identical inData:", activeRequestInDataRef.current);
+                abortControllerRef.current.abort();
+            } else if (abortControllerRef.current) {
+                logDev("New request with different inData. Previous active request (inData:", activeRequestInDataRef.current, ") continues. New request inData:", currentCallInData);
+            }
+
+            localAbortController = new AbortController();
+            localSignal = localAbortController.signal;
+
+            abortControllerRef.current = localAbortController;
+            activeRequestInDataRef.current = currentCallInData;
         }
 
-        // Create a new AbortController for this request
-        const currentAbortController = new AbortController();
-        abortControllerRef.current = currentAbortController;
-        const signal = currentAbortController.signal;
-
-        let currentInData = inDataParam;
 
         try {
             console.group("🔥 /greeting")
@@ -212,40 +226,34 @@ export const useGreetingPost = (
                 return;
             }
 
-            if (!currentInData) {
-                // use last saved inData
-                currentInData = _inData;
-            }
-
-            if (fireIf && !fireIf(currentInData)) {
-                // setLoading(false); // Handled by finally
+            if (fireIf && !fireIf(currentCallInData)) {
+                setLoading(false); // Đảm bảo setLoading(false) nếu không fire
                 return;
             }
 
-            logDev("↙️", currentInData)
+            logDev("🚀", currentCallInData)
 
-            // Check if aborted before making the API call
-            if (signal.aborted) {
-                logDev("Request aborted before sending.");
-                // setLoading(false); // Handled by finally
+            if (abortAble && localSignal?.aborted) {
+                logDev("Request aborted before sending for inData:", currentCallInData);
                 return;
             }
 
             const greetingResponse = await api.greetingPostRaw(
-                { // API parameters
+                {
                     greetingIN: {
-                        data: currentInData!,
+                        data: currentCallInData!,
                     },
-                    stream: !!memoStream, // Assuming 'stream' is an API parameter for the endpoint
+                    ...{
+                        stream: !!memoStream
+                    },
                 },
-                { // RequestInit options for fetch
-                    signal: signal, // Pass the abort signal
+                {
+                    signal: abortAble ? localSignal : undefined,
                 }
             );
 
-            // Check if aborted after receiving headers but before processing body
-            if (signal.aborted) {
-                logDev("Request aborted after receiving headers.");
+            if (abortAble && localSignal?.aborted) {
+                logDev("Request aborted after receiving headers for inData:", currentCallInData);
                 return;
             }
 
@@ -263,9 +271,8 @@ export const useGreetingPost = (
 
                             const readChunk = async () => {
                                 try {
-                                    // Check signal before each read
-                                    if (signal.aborted) {
-                                        logDev("Stream reading aborted by signal.");
+                                    if (abortAble && localSignal?.aborted) {
+                                        logDev("Stream reading aborted by signal for inData:", currentCallInData);
                                         if (typeof reader.cancel === 'function') {
                                             await reader.cancel("Aborted by user");
                                         }
@@ -274,17 +281,19 @@ export const useGreetingPost = (
 
                                     const {done, value} = await reader.read();
                                     if (done) {
-                                        if (signal.aborted) logDev("Stream finished, but signal was aborted around the same time.");
+                                        if (abortAble && localSignal?.aborted) logDev("Stream finished for inData:", currentCallInData, ", but signal was aborted.");
                                         return;
                                     }
-                                    if (signal.aborted) { // Check again after value is received
-                                        logDev("Stream reading aborted by signal after read().");
+                                    if (abortAble && localSignal?.aborted) {
+                                        logDev("Stream reading aborted by signal after read() for inData:", currentCallInData);
                                         return;
                                     }
 
                                     let chunkText = textDecoder.decode(value, {stream: true}).trim();
                                     if (!chunkText) {
-                                        return; // Continue to next read if chunk is empty
+                                        // Sửa: return readChunk() để tiếp tục đọc nếu chunk rỗng nhưng stream chưa done
+                                        await readChunk();
+                                        return;
                                     }
                                     try {
                                         chunkText = trimDataOnStream(chunkText)
@@ -305,7 +314,7 @@ export const useGreetingPost = (
                                                 try {
                                                     data = JSON.parse(jString)
                                                 } catch (e: unknown) {
-                                                    // Ignore parsing error for individual sub-chunks if needed
+                                                    // Ignore
                                                 }
                                                 if (!data) {
                                                     continue
@@ -318,235 +327,178 @@ export const useGreetingPost = (
                                     }
                                     await readChunk();
                                 } catch (e: any) {
-                                    if (e.name === 'AbortError' || signal.aborted) {
-                                        logDev("Stream reading aborted:", e.message);
+                                    if (abortAble && (e.name === 'AbortError' || localSignal?.aborted)) {
+                                        logDev("Stream reading aborted for inData:", currentCallInData, "Error:", e.message);
                                     } else {
-                                        logDev("Error reading stream chunk:", e);
+                                        logDev("Error reading stream chunk for inData:", currentCallInData, "Error:", e);
+                                        // Cân nhắc việc throw lỗi ở đây hoặc xử lý khác để báo hiệu stream bị lỗi
                                     }
                                 }
                             }
 
                             await readChunk()
-                            if (signal.aborted) {
-                                logDev("Stream processing loop finished due to abort.");
+                            if (abortAble && localSignal?.aborted) {
+                                logDev("Stream processing loop finished due to abort for inData:", currentCallInData);
                                 return;
                             }
-                            // END readChunks
                             setTimeout(
                                 () => {
-                                    if (!signal.aborted) { // Only reset if not aborted
-                                        logDev("reset streamResponseStore")
+                                    if (!abortAble || (abortAble && !localSignal?.aborted)) {
+                                        logDev("Reset streamResponseStore for inData:", currentCallInData)
                                         setStreamResponseStore(() => [])
                                     } else {
-                                        logDev("Stream was aborted, not resetting streamResponseStore via timeout.")
+                                        logDev("Stream was aborted for inData:", currentCallInData, ", not resetting streamResponseStore via timeout.")
                                     }
                                 }, 1000
                             )
-                            return;
+                            return; // Sửa: return ở đây để không chạy vào phần non-stream
                         }
-                    } else {
-                        if (signal.aborted) {
-                            logDev("Request aborted before reading non-streamed value.");
-                            return;
-                        }
-                        const v = await greetingResponse.value()
-                        if (signal.aborted) { // Check after value() resolves
-                            logDev("Request aborted during/after reading non-streamed value.");
-                            return;
-                        }
-                        setResponse(v)
-                        if (useCachedResponse) {
-                            setGreetingOUTStore(pre => (
-                                {
-                                    ...pre,
-                                    [cachedKey(currentInData)]: v
-                                }
-                            ))
-                        }
-                        logDev("↘️", v)
-                        return v;
                     }
-                    break; // Added break for clarity, though return exits.
-                case 204:
-                    return null;
-                default:
-                    if (signal.aborted) {
-                        logDev("Request aborted before reading error value.");
+                    // Sửa: Chuyển phần xử lý non-stream ra ngoài if (memoStream)
+                    if (abortAble && localSignal?.aborted) {
+                        logDev("Request aborted before reading non-streamed value for inData:", currentCallInData);
                         return;
                     }
-                    return await greetingResponse.value();
+                    const v = await greetingResponse.value()
+                    if (abortAble && localSignal?.aborted) {
+                        logDev("Request aborted during/after reading non-streamed value for inData:", currentCallInData);
+                        return;
+                    }
+                    setResponse(v)
+                    if (useCachedResponse) {
+                        setGreetingOUTStore(pre => (
+                            {
+                                ...pre,
+                                [cachedKey(currentCallInData)]: v
+                            }
+                        ))
+                    }
+                    logDev("✅", v)
+                    return v;
+                case 204:
+                    logDev("✅ Received 204 No Content for inData:", currentCallInData);
+                    setResponse(null as any); // Hoặc một giá trị biểu thị "no content"
+                    // Không nên cache giá trị null nếu logic cache không xử lý được
+                    // if (useCachedResponse) {
+                    //     setGreetingOUTStore(pre => ({ ...pre, [cachedKey(currentCallInData)]: null as any }));
+                    // }
+                    return null;
+                default:
+                    if (abortAble && localSignal?.aborted) {
+                        logDev("Request aborted before reading error value for inData:", currentCallInData);
+                        return;
+                    }
+                    // Sửa: Xử lý lỗi một cách nhất quán
+                    const errorValue = await greetingResponse.value(); // Thường là { error: ... }
+                    setResponse(errorValue as GreetingOUT); // Cập nhật response với lỗi
+                    if (useCachedResponse) {
+                        // Có thể bạn muốn cache cả lỗi, hoặc xóa cache entry
+                        setGreetingOUTStore(pre => omit(pre, [cachedKey(currentCallInData)]));
+                        // Hoặc: setGreetingOUTStore(pre => ({ ...pre, [cachedKey(currentCallInData)]: errorValue as GreetingOUT }));
+                    }
+                    errorToast(`API Error ${greetingResponse.raw.status} for /greeting`,
+                        <pre>{JSON.stringify(errorValue, null, 2)}</pre>);
+                    logDev("❌ API Error:", errorValue);
+                    return errorValue; // Trả về lỗi để bên gọi có thể xử lý nếu cần
             }
 
         } catch (e: any) {
-            if (e.name === 'AbortError' || (signal && signal.aborted)) {
-                logDev("Fetch operation aborted:", e.message);
-                // No error toast for user-initiated aborts
-                // Cache is not modified on abort
+            if (abortAble && (e.name === 'AbortError' || (localSignal && localSignal.aborted))) {
+                logDev("Fetch operation aborted for inData:", currentCallInData, "Error:", e.message);
             } else {
-                e = e as ResponseError
+                // e = e as ResponseError // Không cần ép kiểu ở đây nữa nếu đã xử lý ở default case
                 if (useCachedResponse) {
-                    setGreetingOUTStore(pre => omit(pre, [cachedKey(currentInData)]))
+                    setGreetingOUTStore(pre => omit(pre, [cachedKey(currentCallInData)]))
                 }
-                console.error(e)
-                const {response: errorResponse} = e
-                if (!errorResponse) {
-                    errorToast(`no response:`, e.message)
-                    // setLoading(false); // Handled by finally
-                    return;
+                console.error("💥 Exception in fire():", e)
+                // Xử lý lỗi chung nếu không phải AbortError
+                // (Ví dụ: lỗi mạng không phải từ API response status)
+                if (e instanceof ResponseError) { // Kiểm tra nếu là ResponseError từ generated client
+                    const {response: errorResponse} = e;
+                    if (!errorResponse) {
+                        errorToast(`Network error or no response:`, e.message);
+                        return;
+                    }
+                    const serror = (await errorResponse?.json())?.error;
+                    errorToast(
+                        `Call API \`greetingPost\` error: ${errorResponse.status} (${get(serror, 'status')})`,
+                        <pre>{get(serror, 'message')}</pre>
+                    );
+                } else {
+                    errorToast(`Unexpected error:`, e.message);
                 }
-                const serror = (await errorResponse?.json())?.error;
-                errorToast(
-                    `call api \`greetingPost\` error: ${errorResponse.status} (${get(serror, 'status')})`,
-                    <pre>{get(serror, 'message')}</pre>
-                )
-                throw e; // Re-throw non-abort errors
+                // Không throw e ở đây nữa nếu đã xử lý và hiển thị toast
+                // throw e;
             }
         } finally {
             setLoading(false)
-            // Clear the controller for this specific call if it's still the one in the ref
-            if (abortControllerRef.current === currentAbortController) {
-                abortControllerRef.current = null;
+            if (abortAble && localAbortController) {
+                if (abortControllerRef.current === localAbortController) {
+                    abortControllerRef.current = null;
+                    activeRequestInDataRef.current = null;
+                    logDev("Cleared global abort refs for inData:", currentCallInData);
+                } else {
+                    logDev("Global abort refs were for a different/newer request. Not clearing for inData:", currentCallInData);
+                }
             }
             console.groupEnd()
         }
     }
 
     const abort = useCallback(() => {
-        if (abortControllerRef.current) {
-            logDev("User explicitly called abort().");
+        if (abortAble && abortControllerRef.current) {
+            logDev("User explicitly called abort(). Aborting request with inData:", activeRequestInDataRef.current);
             abortControllerRef.current.abort();
-            // setLoading(false); // Optional: for immediate UI feedback, but finally in fire() handles it.
+        } else if (!abortAble) {
+            logDev("abort() called, but abortAble is false. No action taken.");
         }
-    }, []);
+    }, [abortAble]);
 
-    // settings for infinity scroll
-    const nextCursorValue = useMemo(() => {
-        if (!_infScrollConfig || !response)
-            return;
-        return get(response, _infScrollConfig?.nextCursorPath ?? infinityScrollDefault.nextCursorPath)
-    }, [response, _infScrollConfig]);
-
-    const hasMoreValue = useMemo(() => {
-        if (!_infScrollConfig || !response)
-            return;
-        return get(response, _infScrollConfig?.hasMorePath ?? infinityScrollDefault.hasMorePath)
-    }, [response, _infScrollConfig]);
-
-    const infinityScrollFilteredData = useMemo(
-        () => {
-            if (!_infScrollConfig || !greetingOUTStore || typeof greetingOUTStore !== 'object')
-                return [];
-            const flattenData = Object.values(greetingOUTStore)
-                .flatMap(pageResponse => get(pageResponse, _infScrollConfig.dataPath ?? infinityScrollDefault.dataPath, []))
-            const dataFilterFn = _infScrollConfig.dataFilterFn || infinityScrollDefault.dataFilterFn;
-            return flattenData.filter(dataFilterFn)
-        },
-        [greetingOUTStore, _infScrollConfig]
-    )
-    const loadInfinity = useCallback(async () => {
-        if (loading || !hasMoreValue || !nextCursorValue) {
-            return;
-        }
-        try {
-            const fireNextCursorPath = _infScrollConfig?.fireNextCursorPath ?? infinityScrollDefault.fireNextCursorPath;
-            await fire(
-                merge(
-                    _inData,
-                    unflattenObject({[fireNextCursorPath]: nextCursorValue})
-                )
-            );
-        } catch (error) {
-            console.error("loadInfinity error:", error);
-        }
-    }, [loading, hasMoreValue, nextCursorValue, _inData]);
-
-    const observerTargetRef = useRef<HTMLDivElement>(null);
-    const InfinityScrollObserver = useCallback(() => {
-        if (!_infScrollConfig || !hasMoreValue || loading)
-            return null;
-
-        return (
-            <div ref={observerTargetRef} style={{height: '1px', marginTop: '1px'}} aria-hidden="true"/>
-        )
-    }, [_infScrollConfig, hasMoreValue, loading])
-
-    useEffect(() => {
-        const observerTargetElement = observerTargetRef.current;
-        if (!observerTargetElement) {
-            return;
-        }
-        const scrollRootElement = _infScrollConfig?.scrollRootRef?.current;
-        const observer = new IntersectionObserver(
-            (entries) => {
-                const entry = entries[0];
-                if (entry.isIntersecting && hasMoreValue && !isLoading) {
-                    loadInfinity();
-                }
-            },
-            {
-                root: scrollRootElement,
-                threshold: _infScrollConfig?.observerConfig?.threshold || 0.1,
-                rootMargin: _infScrollConfig?.observerConfig?.threshold || "0px 0px 200px 0px"
-            }
-        );
-
-        observer.observe(observerTargetElement);
-
-        return () => {
-            if (observerTargetElement) {
-                observer.unobserve(observerTargetElement);
-            }
-        };
-    }, [hasMoreValue, loading, _infScrollConfig]);
-
-    // END for infinity scroll
 
     const OUTComponent = useCallback(
-        // ... (no changes needed here, relies on `loading` and `response` state)
         () => {
             if (!CustomOUTComponent)
                 return null;
 
-            if (loading || !response)
+            if (loading || !response) // Sửa: Kiểm tra response có tồn tại không
                 return LoadingComponent ? <LoadingComponent/> : <div>loading...</div>;
 
             const data = response;
-            if (!data) {
-                return EmptyComponent ? <EmptyComponent/> : <div>(data is empty)</div>;
-            }
+            // if (!data) { // Đã kiểm tra ở trên
+            //     return EmptyComponent ? <EmptyComponent/> : <div>(data is empty)</div>;
+            // }
             return CustomOUTComponent(data)
         },
         [response, loading, CustomOUTComponent, LoadingComponent, EmptyComponent]
     )
 
     const ResultComponent = useCallback(
-        // ... (no changes needed here)
         () => {
             if (!CustomResultComponent)
                 return null;
 
-            if (loading || !response)
+            if (loading || !response?.result) // Sửa: Kiểm tra response và response.result
                 return LoadingComponent ? <LoadingComponent/> : <div>loading...</div>;
 
             const data = response?.result;
-            if (!data) {
-                return EmptyComponent ? <EmptyComponent/> : <div>(data is empty)</div>;
-            }
+            // if (!data) { // Đã kiểm tra ở trên
+            //     return EmptyComponent ? <EmptyComponent/> : <div>(data is empty)</div>;
+            // }
             return CustomResultComponent(data as unknown as OUTResult)
         },
         [response, loading, CustomResultComponent, LoadingComponent, EmptyComponent]
     )
 
     const DataComponent = useCallback(
-        // ... (no changes needed here)
         () => {
             if (!CustomDataComponent)
                 return null;
 
-            if (loading || !response)
+            const data = valueOfOUTResultMaybeData(response?.result);
+
+            if (loading && !data) // Sửa: Hiển thị loading nếu đang load và chưa có data
                 return LoadingComponent ? <LoadingComponent/> : <div>loading...</div>;
 
-            const data = valueOfOUTResultMaybeData(response?.result);
             if (!data) {
                 return EmptyComponent ? <EmptyComponent/> : <div>(data is empty)</div>;
             }
@@ -556,15 +508,15 @@ export const useGreetingPost = (
     )
 
     const DataItemComponent = useCallback(
-        // ... (no changes needed here)
         () => {
             if (!CustomDataItemComponent)
                 return null;
 
-            if (loading || !response)
+            const data = valueOfOUTResultMaybeData(response?.result);
+
+            if (loading && !data) // Sửa: Hiển thị loading nếu đang load và chưa có data
                 return LoadingComponent ? <LoadingComponent/> : <div>loading...</div>;
 
-            const data = valueOfOUTResultMaybeData(response?.result);
             if (!data)
                 return EmptyComponent ? <EmptyComponent/> : <div>(data is empty)</div>;
 
@@ -585,34 +537,182 @@ export const useGreetingPost = (
                 <div className={mainClassName ?? ""}>
                     {
                         data.map((item: OUTResultMaybeDataItem, index) => {
-                            if (CustomDataItemComponent) {
-                                return CustomDataItemComponent(item, index)
-                            }
-                            return (
-                                // use item
-                                <div className={dataItemClassName ?? ""} key={get(item, 'id', `noID-${index}`)}>
-                                    {JSON.stringify(item, null, 4)}
-                                </div>
-                            )
+                            // Sửa: Không cần kiểm tra CustomDataItemComponent nữa vì đã kiểm tra ở đầu hàm
+                            return CustomDataItemComponent(item, index)
+                            // Dòng dưới đây sẽ không bao giờ được thực thi nếu CustomDataItemComponent tồn tại
+                            // return (
+                            //     <div className={dataItemClassName ?? ""} key={get(item, 'id', `noID-${index}`)}>
+                            //         {JSON.stringify(item, null, 4)}
+                            //     </div>
+                            // )
                         })
                     }
                 </div>
             )
         },
-        [response, loading, CustomDataItemComponent, mainClassName, dataItemClassName, LoadingComponent, EmptyComponent]
+        [response, loading, CustomDataItemComponent, mainClassName, /*dataItemClassName,*/ LoadingComponent, EmptyComponent]
     )
 
     const cachedResponse = useMemo(() => {
-        // Use _inData for consistency if inData prop is undefined initially
         const keyLookup = _inData !== undefined ? _inData : inData;
+        if (keyLookup === undefined) return undefined; // Tránh lỗi nếu keyLookup là undefined
         return greetingOUTStore[cachedKey(keyLookup)];
-    }, [greetingOUTStore, _inData, inData]) // Added _inData
+    }, [greetingOUTStore, _inData, inData])
 
     const responseSWR = useMemo(
         () => {
             return cachedResponse || response;
         },
         [cachedResponse, response]
+    )
+
+    const cachedResponseStoreFilteredValues: any[] = useDeepCompareMemo(
+        () => {
+            if (!greetingOUTStore || !cachedResponseStoreValuesFilter) {
+                return []
+            }
+            const filterPath = cachedResponseStoreValuesFilter.path || 'result.data'
+            return Object.values(greetingOUTStore)
+                .flatMap(r => {
+                    const value = get(r, filterPath);
+                    // Đảm bảo chỉ flatMap nếu value là array, nếu không trả về mảng chứa value đó (nếu có)
+                    if (Array.isArray(value)) return value;
+                    return value !== undefined && value !== null ? [value] : [];
+                })
+                .filter(item => item !== undefined && item !== null) // Lọc ra các item undefined/null sau flatMap
+                .filter(cachedResponseStoreValuesFilter.fn)
+        },
+        [greetingOUTStore]
+    )
+
+
+    const result = useMemo(() => {
+        if (!response)
+            return null;
+        return response.result as unknown as Result;
+    }, [response])
+
+    const getDataFn = (response?: OUT, dataPath?: keyof Result | string) => {
+        const result = response?.result as unknown as Result;
+        if (!result || !dataPath || !isObject(result))
+            return null;
+        if (dataPath && dataPath in result) {
+            return get(result, dataPath, null) as unknown as Data;
+        }
+        return get(response, dataPath, null) as unknown as Data;
+    }
+    const data = useMemo(() => {
+        if (!response) {
+            return null
+        }
+        return getDataFn(response, dataPath)
+    }, [response, dataPath])
+
+    const hasMore = useMemo(() => {
+        if (!result || !hasMorePath || !isObject(result))
+            return false;
+        if (hasMorePath && hasMorePath in result) {
+            return get(result, hasMorePath, false)
+        }
+        return !!get(response, hasMorePath, false);
+    }, [response, result])
+
+    const count = useMemo(() => {
+        if (!result || !countPath || !isObject(result))
+            return 0;
+        if (countPath && countPath in result) {
+            return get(result, countPath, 0)
+        }
+        return get(response, countPath, 0) as number;
+    }, [response, result])
+
+    const nextCursor = useMemo(() => {
+        if (!result || !nextCursorPath || !isObject(result))
+            return '';
+        if (nextCursorPath && nextCursorPath in result) {
+            return get(result, nextCursorPath, '')
+        }
+        return get(response, nextCursorPath, '') as string;
+    }, [response, result])
+
+    const cachedDataList = useMemo(() => {
+        if (!dataPath || !dataListConfig) {
+            return [];
+        }
+        const responseValues = Object.values(greetingOUTStore);
+        if (!responseValues.length) {
+            return []
+        }
+        let data = flatten(
+            responseValues.map(
+                response => getDataFn(response, dataPath) as Data
+            )
+        ) as Item[];
+
+        // uniq by
+        const uniqByParam = dataListConfig.uniqBy ?? "id";
+        if (uniqByParam) {
+            data = uniqBy(
+                data,
+                uniqByParam,
+            ) as Item[]
+        }
+        // console.log({data})
+        // filter
+        if (dataListConfig.filter) {
+            const _filterParams = isPlainObject(dataListConfig.filter) ?
+                transformDotKeyObjectToRawObject(dataListConfig.filter) :
+                dataListConfig.filter;
+            data = filter(data, _filterParams) as Item[]
+        }
+        // orderby
+        if (dataListConfig.orderBy) {
+            data = orderBy(data, dataListConfig.orderBy) as Item[]
+        }
+
+        return data;
+    }, [greetingOUTStore])
+
+    const InfinityScrollHere = useCallback(
+        ({
+             loadMoreHandler,
+             lastElementSelector = {
+                 data: cachedDataList,
+                 cssDataPathMap: {id: "id"},
+             },
+             scrollTo = "bottom",
+             scrollIntoViewOptions = true, //{behavior: 'instant', block: 'start'}
+             triggerElementHeight = 1,//px
+             intersectionObserverOptions,
+             viewportRef,
+         }: Omit<InfinityScrollHereProps, 'hasMore' | 'isLoading'>) => {
+
+            if (!useInfinityScroll) {
+                return;
+            }
+
+            if (typeof lastElementSelector === 'object' && !('data' in lastElementSelector)) {
+                lastElementSelector.data = cachedDataList;
+            }
+            return (
+                <InfinityScrollHereComponent
+                    lastElementSelector={lastElementSelector}
+                    scrollTo={scrollTo}
+                    loadMoreHandler={loadMoreHandler || fire}
+                    viewportRef={viewportRef}
+                    scrollIntoViewOptions={scrollIntoViewOptions}
+                    triggerElementHeight={triggerElementHeight}
+                    intersectionObserverOptions={intersectionObserverOptions}
+                    isLoading={loading}
+                    hasMore={hasMore}
+                />
+            )
+        },
+        [
+            loading,
+            hasMore,
+            cachedDataList,
+        ]
     )
 
     return {
@@ -623,18 +723,25 @@ export const useGreetingPost = (
         isResponseChanged,
         fire,
         postAction: fire,
-        abort, // Expose the abort function
+        abort,
         setInData,
         loading,
         api,
         cachedResponseStore: greetingOUTStore,
+        resetCachedResponseStore: resetGreetingOUTStore, // <--- Thêm hàm reset vào đây
+        cachedResponseStoreFilteredValues,
         cachedResponse,
         DataItemComponent,
         DataComponent,
         ResultComponent,
         OUTComponent,
-        InfinityScrollObserver,
-        infinityScrollFilteredData,
-        cachedKey
+        cachedKey,
+        hasMore,
+        nextCursor,
+        count,
+        data,
+        cachedDataList,
+        dataList: cachedDataList,
+        InfinityScrollHere,
     }
 }
