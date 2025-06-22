@@ -1,4 +1,4 @@
-import React, {ReactNode, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState} from "react";
+import React, {useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState} from "react";
 // @ts-ignore
 import useGreetingApi from "./useGreetingApi"
 import {filter, flatten, get, isEqual, isObject, isPlainObject, Many, merge, omit, orderBy, uniqBy} from 'lodash'
@@ -58,13 +58,8 @@ type DataListConfig = {
     uniqBy?: keyof Item | string;
 }
 
-type InfiniteScrollerConfig = {
-    ItemComponent: (item: Item, index: number) => ReactNode;
-    onLoadMore: () => void;
+type InfiniteScrollConfig = {
     scrollTo?: "bottom" | "top" | "right" | "left";
-    rootMargin?: IntersectionObserverInit['rootMargin'];
-    rootClassName?: string;
-    noRoot?: boolean;
 }
 
 interface Props extends ResultDataInnerComponentProps, ApiConfigParamsProps {
@@ -86,6 +81,7 @@ interface Props extends ResultDataInnerComponentProps, ApiConfigParamsProps {
     dataPath?: keyof Result | string;
     cachedDataListFilter?: string | Record<string, any>;
     useInfinityScroll?: boolean;
+    infiniteScrollConfig?: InfiniteScrollConfig;
     dataListConfig?: DataListConfig;
 }
 
@@ -120,6 +116,7 @@ export const useGreetingPost = (
         countPath = 'count',
         dataPath = 'data',
         useInfinityScroll = false,
+        infiniteScrollConfig,
         dataListConfig = {uniqBy: "id"},
     }: Props
 ) => {
@@ -727,7 +724,7 @@ export const useGreetingPost = (
 
     /* Scroll Region */
     const loadMoreHandler = useCallback(() => {
-        if (loading || !hasMore) {
+        if (loading || !hasMore || !useInfinityScroll) {
             return;
         }
         if (!nextCursor) {
@@ -765,7 +762,13 @@ export const useGreetingPost = (
     });
 
     // We keep the scroll position when new items are added etc.
+    const isReverseScroll = useMemo(
+        () => ['top', 'left'].includes(infiniteScrollConfig?.scrollTo ?? ''),
+        [infiniteScrollConfig?.scrollTo]
+    )
     useLayoutEffect(() => {
+        if (!useInfinityScroll || !isReverseScroll)
+            return;
         const lastScrollDistanceToBottom = lastScrollDistanceToBottomRef.current;
         console.log({lastScrollDistanceToBottom})
 
@@ -787,10 +790,12 @@ export const useGreetingPost = (
             console.log("window scroll top:", scrollTop)
             document.documentElement.scrollTop = scrollTop;
         }
-    }, [cachedDataList, infiniteRootRef]);
+    }, [cachedDataList, infiniteRootRef, useInfinityScroll]);
 
     const rootRefSetter = useCallback(
         (node: HTMLDivElement) => {
+            if (!useInfinityScroll || !isReverseScroll)
+                return;
             infiniteRootRef(node);
             scrollableRootRef.current = node;
         },
@@ -807,6 +812,8 @@ export const useGreetingPost = (
     }, [scrollableRootRef]);
 
     useEffect(() => {
+        if (!useInfinityScroll || !isReverseScroll)
+            return;
         let handleScroll;
         if (!scrollableRootRef.current) {
             const handleScroll = () => {
