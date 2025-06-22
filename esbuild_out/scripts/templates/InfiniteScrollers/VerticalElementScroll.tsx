@@ -1,5 +1,6 @@
+// /Users/lethanh/WebstormProjects/apiyaml/src/commands/make_docs/scripts/templates/InfiniteScrollers/VerticalElementScroll.tsx
 import useInfiniteScroll, {UseInfiniteScrollHookArgs} from "react-infinite-scroll-hook";
-import React, {useCallback} from "react";
+import React, {useMemo} from "react";
 import {Item} from "../useFn.template";
 import {Loading} from "./Loading";
 
@@ -33,30 +34,32 @@ export default function VerticalElementScroll(
         rootMargin: rootMargin,
     });
 
-    const ItemListComponent = useCallback(() => {
-        if (!items.length)
-            return;
-        console.log("processing ItemListComponent")
-        return items.map(ItemComponent)
-    }, [items])
+    // SỬA ĐỔI: Dùng useMemo để tối ưu hóa việc tạo danh sách item.
+    // Hoặc có thể map trực tiếp trong JSX nếu không cần tối ưu hóa cao.
+    const renderedItems = useMemo(() => {
+        return items.map(ItemComponent);
+    }, [items, ItemComponent]);
+
+    const commonContent = (
+        <>
+            {renderedItems}
+            {hasNextPage && <div ref={infiniteRef}><Loading/></div>}
+        </>
+    );
 
     if (rootRef) return (
         <div
             ref={rootRef}
             className={className}
         >
-            <>
-                <ItemListComponent/>
-            </>
-            {hasNextPage && <div ref={infiniteRef}><Loading/></div>}
+            {commonContent}
         </div>
     );
     return (
-        <div>
-            <>
-                <ItemListComponent/>
-            </>
-            {hasNextPage && <div ref={infiniteRef}><Loading/></div>}
+        <div className={className}>
+            {commonContent}
         </div>
     );
 }
+
+    export const VerticalElementScrollMemo = React.memo(VerticalElementScroll);

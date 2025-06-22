@@ -86,3 +86,5 @@ export default function ReverseHorizontalElementScroll(
         </div>
     );
 }
+
+export const ReverseHorizontalElementScrollMemo = React.memo(ReverseHorizontalElementScroll)

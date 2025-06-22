@@ -38,7 +38,7 @@ export function errorToast(msg: string | Error, description?: string | ReactNode
 
 export function usePrevious(value: unknown) {
     // create a new reference
-    const ref = useRef<typeof value>();
+    const ref = useRef<typeof value>(null);
 
     // store current value in ref
     useEffect(() => {

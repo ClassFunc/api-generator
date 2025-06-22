@@ -17,9 +17,9 @@ import {
     usePrevious
 } from "./_useFnCommon";
 import {InfinityScrollHereComponent, InfinityScrollHereProps} from "./InfinityScrollHereComponent";
-import VerticalElementScroll from "./InfiniteScrollers/VerticalElementScroll";
-import ReverseVerticalElementScroll from "./InfiniteScrollers/ReverseVerticalElementScroll";
-import ReverseHorizontalElementScroll from "./InfiniteScrollers/ReverseHorizontalElementScroll";
+import {VerticalElementScrollMemo} from "./InfiniteScrollers/VerticalElementScroll";
+import {ReverseVerticalElementScrollMemo} from "./InfiniteScrollers/ReverseVerticalElementScroll";
+import {ReverseHorizontalElementScrollMemo} from "./InfiniteScrollers/ReverseHorizontalElementScroll";
 
 type INData = Unpacked<GreetingIN['data']>
 type OUT = GreetingOUT;
@@ -753,13 +753,14 @@ export const useGreetingPost = (
             switch (scrollTo) {
                 case "bottom":
                 case "right":
-                    return VerticalElementScroll(commonParams)
+                    // Sử dụng component đã được memoize với cú pháp JSX
+                    return <VerticalElementScrollMemo {...commonParams} />;
                 case "top":
-                    return ReverseVerticalElementScroll(commonParams)
+                    return <ReverseVerticalElementScrollMemo {...commonParams}/>
                 case "left":
-                    return ReverseHorizontalElementScroll(commonParams)
+                    return <ReverseHorizontalElementScrollMemo {...commonParams}/>
                 default:
-                    return VerticalElementScroll(commonParams)
+                    return <VerticalElementScrollMemo {...commonParams} />;
             }
         },
         [
@@ -769,6 +770,13 @@ export const useGreetingPost = (
             useInfinityScroll
         ]
     )
+
+    // const VerticalElementScrollMemo = useCallback(
+    //     (commonParams: any) => {
+    //         return VerticalElementScroll(commonParams)
+    //     },
+    //     []
+    // )
 
     return {
         response,
