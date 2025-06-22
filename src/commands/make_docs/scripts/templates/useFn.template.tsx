@@ -676,7 +676,7 @@ export const useGreetingPost = (
         }
         // orderby
         if (dataListConfig.orderBy) {
-            data = orderBy(data, dataListConfig.orderBy) as Item[]
+            data = orderBy(data, dataListConfig.orderBy.iteratees, dataListConfig.orderBy.orders) as Item[]
         }
 
         return data;
