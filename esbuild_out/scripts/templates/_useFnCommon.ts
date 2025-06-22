@@ -1,8 +1,7 @@
-// @ts-nocheck
-
 import {ReactNode, useEffect, useMemo, useRef} from "react";
+// @ts-ignore
 import {ConfigurationParameters} from "../";
-import isEqual from "lodash/isEqual";
+import {forEach, isEqual, set} from "lodash";
 
 // types
 export type Unpacked<T> =
@@ -64,12 +63,43 @@ export function trimDataOnStream(text: string): string {
     return text;
 }
 
-export function useDeepCompareMemo(factory, dependencies) {
-    const dependenciesRef = useRef();
+export function useDeepCompareMemo(factory: any, dependencies: any[]) {
+    const dependenciesRef = useRef<any[]>([]);
 
     if (!isEqual(dependenciesRef.current, dependencies)) {
         dependenciesRef.current = dependencies;
     }
 
-    return useMemo(factory, dependenciesRef.current);
+    return useMemo(factory, dependenciesRef.current) as any;
+}
+
+/* transform dotKeyObject to RawObject
+example:
+const sourceObject = {
+  'user.name': 'barney',
+  'user.age': 40,
+  'active': true
+};
+->TO
+{
+    "user": {
+        "name": "barney",
+        "age": 40
+    },
+    "active": true
+}
+* */
+
+export function transformDotKeyObjectToRawObject(source: any) {
+
+    // 1. Create an empty object for the result.
+    const result = {};
+
+    // 2. Iterate over the source object.
+    forEach(source, (value, key) => {
+        // 3. For each key-value pair, use _.set to place it in the result object.
+        //    Lodash will parse the dot-notation key as a path.
+        set(result, key, value);
+    });
+    return result;
 }

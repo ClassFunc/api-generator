@@ -1,8 +1,8 @@
-// @ts-nocheck
 import React, {useCallback, useEffect, useMemo, useRef, useState} from "react";
+// @ts-ignore
 import useGreetingApi from "./useGreetingApi"
-import {flatten, get, isEqual, isPlainObject, omit, uniqBy} from 'lodash'
-
+import {filter, flatten, get, isEqual, isObject, isPlainObject, Many, omit, orderBy, uniqBy} from 'lodash'
+// @ts-ignore
 import {GreetingIN, GreetingOUT, ResponseError} from "../"
 import {atom, useAtom, useAtomValue} from "jotai";
 import {useResetAtom} from "jotai/utils"; // Đảm bảo đã import
@@ -10,19 +10,25 @@ import {
     ApiConfigParamsProps,
     errorToast,
     logDev,
+    transformDotKeyObjectToRawObject,
     trimDataOnStream,
     Unpacked,
     useDeepCompareMemo,
     usePrevious
 } from "./_useFnCommon";
-import {InfinityScrollHereComponent, lastElementSelectorProps} from "./InfinityScrollHereComponent";
+import {InfinityScrollHereComponent, InfinityScrollHereProps} from "./InfinityScrollHereComponent";
 
 type INData = Unpacked<GreetingIN['data']>
+type OUT = GreetingOUT;
 type OUTResult = Unpacked<GreetingOUT['result']>
+type Result = OUTResult;
+
 export type OUTResultMaybeData = OUTResult extends { data: infer U }
     ? U
     : OUTResult
 export type OUTResultMaybeDataItem = Unpacked<OUTResultMaybeData>
+type Data = OUTResultMaybeData;
+type Item = OUTResultMaybeDataItem;
 
 function valueOfOUTResultMaybeData(result: unknown): OUTResultMaybeData | OUTResult | null {
     if (!result)
@@ -41,6 +47,14 @@ interface ResultDataInnerComponentProps {
     EmptyComponent?: () => React.ReactNode;
 }
 
+type DataListConfig = {
+    orderBy?: {
+        iteratees: Many<keyof Item | ((value: Item) => any)>,
+        orders?: Many<'asc' | 'desc'>
+    };
+    filter?: Record<keyof Item | string, any> | ((value: Item) => boolean) | string;
+    uniqBy?: keyof Item | string;
+}
 
 interface Props extends ResultDataInnerComponentProps, ApiConfigParamsProps {
     inData?: INData;
@@ -55,12 +69,13 @@ interface Props extends ResultDataInnerComponentProps, ApiConfigParamsProps {
         fn: (item: any) => boolean;
     };
     abortAble?: boolean;
-    hasMorePath?: string;
-    nextCursorPath?: string;
-    dataPath?: string;
-    dataUniqByPath?: string;
+    hasMorePath?: keyof Result | string;
+    nextCursorPath?: keyof Result | string;
+    countPath?: keyof Result | string;
+    dataPath?: keyof Result | string;
     cachedDataListFilter?: string | Record<string, any>;
     useInfinityScroll?: boolean;
+    dataListConfig?: DataListConfig;
 }
 
 type IGreetingResponseAtom = Record<string, GreetingOUT>;
@@ -89,21 +104,23 @@ export const useGreetingPost = (
         fireEffectDeps,
         cachedResponseStoreValuesFilter,
         abortAble = true,
-        hasMorePath = 'result.hasMore',
-        nextCursorPath = 'result.nextCursor',
-        countPath = 'result.count',
-        dataPath = 'result.data',
-        dataUniqByPath = 'id',
-        cachedDataListFilter = 'id',
-        useInfinityScroll = false
+        hasMorePath = 'hasMore',
+        nextCursorPath = 'nextCursor',
+        countPath = 'count',
+        dataPath = 'data',
+        useInfinityScroll = false,
+        dataListConfig = {uniqBy: "id"},
     }: Props
 ) => {
     const {api} = useGreetingApi(apiConfigParams, apiConfigOptions);
     const [_inData, setInData] = useAtom<INData | undefined>(useDeepCompareMemo(() => atom(inData), [inData]));
+    // @ts-ignore
     const [response, setResponse] = useAtom<GreetingOUT>(lastGreetingOUTAtom)
+    // @ts-ignore
     const resetResponse = useResetAtom(lastGreetingOUTAtom)
     const [streamResponseStore, setStreamResponseStore] = useState<any[]>([])
     const [greetingOUTStore, setGreetingOUTStore] = useAtom(greetingOUTStoreAtom)
+    // @ts-ignore
     const resetGreetingOUTStore = useResetAtom(greetingOUTStoreAtom); // <--- Thêm dòng này
     const [loading, setLoading] = useState<boolean>(false)
     const prevResponse = usePrevious(response);
@@ -226,7 +243,9 @@ export const useGreetingPost = (
                     greetingIN: {
                         data: currentCallInData!,
                     },
-                    stream: !!memoStream,
+                    ...{
+                        stream: !!memoStream
+                    },
                 },
                 {
                     signal: abortAble ? localSignal : undefined,
@@ -566,84 +585,113 @@ export const useGreetingPost = (
         [greetingOUTStore]
     )
 
-    const hasMore = useMemo(() => {
-        if (!response || !hasMorePath)
-            return false;
-        return !!get(response, hasMorePath, false);
+
+    const result = useMemo(() => {
+        if (!response)
+            return null;
+        return response.result as unknown as Result;
     }, [response])
+
+    const getDataFn = (response?: OUT, dataPath?: keyof Result | string) => {
+        const result = response?.result as unknown as Result;
+        if (!result || !dataPath || !isObject(result))
+            return null;
+        if (dataPath && dataPath in result) {
+            return get(result, dataPath, null) as unknown as Data;
+        }
+        return get(response, dataPath, null) as unknown as Data;
+    }
+    const data = useMemo(() => {
+        if (!response) {
+            return null
+        }
+        return getDataFn(response, dataPath)
+    }, [response, dataPath])
+
+    const hasMore = useMemo(() => {
+        if (!result || !hasMorePath || !isObject(result))
+            return false;
+        if (hasMorePath && hasMorePath in result) {
+            return get(result, hasMorePath, false)
+        }
+        return !!get(response, hasMorePath, false);
+    }, [response, result])
 
     const count = useMemo(() => {
-        if (!response || !countPath)
+        if (!result || !countPath || !isObject(result))
             return 0;
+        if (countPath && countPath in result) {
+            return get(result, countPath, 0)
+        }
         return get(response, countPath, 0) as number;
-    }, [response])
+    }, [response, result])
 
     const nextCursor = useMemo(() => {
-        if (!response || !nextCursorPath)
+        if (!result || !nextCursorPath || !isObject(result))
             return '';
+        if (nextCursorPath && nextCursorPath in result) {
+            return get(result, nextCursorPath, '')
+        }
         return get(response, nextCursorPath, '') as string;
-    }, [response])
-
-    const data = useMemo(() => {
-        if (!response || !dataPath)
-            return;
-        return get(response, dataPath, null) as OUTResultMaybeData;
-    }, [response])
+    }, [response, result])
 
     const cachedDataList = useMemo(() => {
-        if (!dataPath) {
+        if (!dataPath || !dataListConfig) {
             return [];
         }
-        const storeValues = Object.values(greetingOUTStore);
-        if (!storeValues.length) {
+        const responseValues = Object.values(greetingOUTStore);
+        if (!responseValues.length) {
             return []
         }
-        let result = uniqBy(
-            flatten(
-                storeValues.map(
-                    response => get(response, dataPath) as OUTResultMaybeData
-                )
-            ),
-            dataUniqByPath,
-        ) as OUTResultMaybeDataItem[]
+        let data = flatten(
+            responseValues.map(
+                response => getDataFn(response, dataPath) as Data
+            )
+        ) as Item[];
 
-        if (!cachedDataListFilter || typeof cachedDataListFilter === 'string') {
-            cachedDataListFilter = {id: cachedDataListFilter || ''};
+        // uniq by
+        const uniqByParam = dataListConfig.uniqBy ?? "id";
+        if (uniqByParam) {
+            data = uniqBy(
+                data,
+                uniqByParam,
+            ) as Item[]
         }
-        Object.entries(
-            cachedDataListFilter as Record<string, any>,
-            (([dataKey, compareValue]) => {
-                result = result.filter(item => {
-                    const itemValue = get(item, dataKey);
-                    if (isEqual(itemValue, compareValue)) {
-                        return true;
-                    }
-                })
-            })
-        )
+        // console.log({data})
+        // filter
+        if (dataListConfig.filter) {
+            const _filterParams = isPlainObject(dataListConfig.filter) ?
+                transformDotKeyObjectToRawObject(dataListConfig.filter) :
+                dataListConfig.filter;
+            data = filter(data, _filterParams) as Item[]
+        }
+        // orderby
+        if (dataListConfig.orderBy) {
+            data = orderBy(data, dataListConfig.orderBy) as Item[]
+        }
 
-        return result;
+        return data;
     }, [greetingOUTStore])
 
     const InfinityScrollHere = useCallback(
         ({
+             loadMoreHandler,
              lastElementSelector = {
                  data: cachedDataList,
                  cssDataPathMap: {id: "id"},
-             } as lastElementSelectorProps,
+             },
              scrollTo = "bottom",
              scrollIntoViewOptions = true, //{behavior: 'instant', block: 'start'}
              triggerElementHeight = 1,//px
-             intersectionObserverOptions = {},
-             loadMoreHandler,
+             intersectionObserverOptions,
              viewportRef,
-         }) => {
+         }: Omit<InfinityScrollHereProps, 'hasMore' | 'isLoading'>) => {
 
             if (!useInfinityScroll) {
                 return;
             }
 
-            if (!lastElementSelector.data) {
+            if (typeof lastElementSelector === 'object' && !('data' in lastElementSelector)) {
                 lastElementSelector.data = cachedDataList;
             }
             return (
@@ -693,6 +741,7 @@ export const useGreetingPost = (
         count,
         data,
         cachedDataList,
+        dataList: cachedDataList,
         InfinityScrollHere,
     }
 }
