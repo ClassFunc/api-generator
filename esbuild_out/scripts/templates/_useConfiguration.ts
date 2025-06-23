@@ -8,7 +8,7 @@ export const useConfiguration = (configParams?: ConfigurationParameters) => {
     useEffect(() => {
         const conf = new Configuration(
             {
-                accessToken: getAuth().currentUser?.getIdToken(),
+                accessToken: async () => (await getAuth().currentUser?.getIdToken()) || '',
                 ...{
                     basePath: process.env.NEXT_PUBLIC_DEV_API_BASE_URL
                         ? process.env.NEXT_PUBLIC_DEV_API_BASE_URL
