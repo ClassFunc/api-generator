@@ -8,6 +8,7 @@ import {atom, useAtom, useAtomValue} from "jotai";
 import {useResetAtom} from "jotai/utils"; // Đảm bảo đã import
 import {
     ApiConfigParamsProps,
+    calledFunction,
     errorToast,
     logDev,
     transformDotKeyObjectToRawObject,
@@ -83,6 +84,7 @@ interface Props extends ResultDataInnerComponentProps, ApiConfigParamsProps {
     useInfinityScroll?: boolean;
     infiniteScrollConfig?: InfiniteScrollConfig;
     dataListConfig?: DataListConfig;
+    inDataDebugger?: boolean;
 }
 
 type IGreetingResponseAtom = Record<string, GreetingOUT>;
@@ -118,6 +120,7 @@ export const useGreetingPost = (
         useInfinityScroll = false,
         infiniteScrollConfig,
         dataListConfig = {uniqBy: "id"},
+        inDataDebugger = false,
     }: Props
 ) => {
     const {api} = useGreetingApi(apiConfigParams, apiConfigOptions);
@@ -169,6 +172,25 @@ export const useGreetingPost = (
     const cachedKey = (__inData: any) => {
         return "/greetingPost;in=" + JSON.stringify(__inData)
     }
+
+    const inDataDebugFn = useDeepCompareMemo(
+        () => {
+            // if (!inDataDebugger)
+            //     return;
+            // const now = new Date()
+            // const ts = now.getSeconds() + "." + now.getMilliseconds()
+            // console.log(`${ts} [inDataDebugger]:`, JSON.stringify(activeRequestInDataRef.current, null, 2))
+        }
+        , [activeRequestInDataRef.current]
+        , inDataDebugger,
+        `[inDataDebugger] > ${calledFunction()}`
+    );
+
+    useEffect(() => {
+        if (inDataDebugger) {
+            inDataDebugFn?.();
+        }
+    }, [activeRequestInDataRef.current])
 
     useEffect(
         () => {
