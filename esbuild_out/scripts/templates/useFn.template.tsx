@@ -877,6 +877,7 @@ export const useGreetingPost = (
         infiniteRootRef,
         InfiniteLoading,
         rootRefSetter,
+        scrollableRootRef,
         handleRootScroll,
     }
 }
