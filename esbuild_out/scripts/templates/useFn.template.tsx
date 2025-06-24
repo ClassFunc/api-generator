@@ -833,9 +833,9 @@ export const useGreetingPost = (
     useEffect(() => {
         if (!useInfinityScroll || !isReverseScroll)
             return;
-        let handleScroll;
+        let handleScroll: (this: Window, ev: Event) => any;
         if (!scrollableRootRef.current) {
-            const handleScroll = () => {
+            handleScroll = () => {
                 const windowRootNode = document.documentElement;
                 lastScrollDistanceToBottomRef.current = windowRootNode.scrollHeight - windowRootNode.scrollTop;
                 console.log("window scroll distance:", lastScrollDistanceToBottomRef.current)
