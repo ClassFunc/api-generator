@@ -491,11 +491,10 @@ export const useGreetingPost = (
             if (loading || !response) // Sửa: Kiểm tra response có tồn tại không
                 return LoadingComponent ? <LoadingComponent/> : <div>loading...</div>;
 
-            const data = response;
             // if (!data) { // Đã kiểm tra ở trên
             //     return EmptyComponent ? <EmptyComponent/> : <div>(data is empty)</div>;
             // }
-            return CustomOUTComponent(data)
+            return CustomOUTComponent(response)
         },
         [response, loading, CustomOUTComponent, LoadingComponent, EmptyComponent]
     )
@@ -792,25 +791,23 @@ export const useGreetingPost = (
         if (!useInfinityScroll || !isReverseScroll)
             return;
         const lastScrollDistanceToBottom = lastScrollDistanceToBottomRef.current;
-        console.log({lastScrollDistanceToBottom})
 
         if (scrollableRootRef.current) {
             const {
                 scrollHeight,
                 scrollTop
             } = scrollableRootRef.current;
-            console.log("❌ CURRENT root scroll:", {
-                scrollHeight,
-                scrollTop
-            })
+            // console.log("❌ CURRENT root scroll:", {
+            //     scrollHeight,
+            //     scrollTop
+            // })
             const newRootScrollTop = scrollHeight - lastScrollDistanceToBottom;
-            console.log("✅ NEW root scroll", {newRootScrollTop});
+            // console.log("✅ NEW root scroll", {newRootScrollTop});
             if (newRootScrollTop > 0)
                 scrollableRootRef.current.scrollTop = newRootScrollTop;
         } else {
-            const scrollTop = document.body.scrollHeight - lastScrollDistanceToBottom
-            console.log("window scroll top:", scrollTop)
-            document.documentElement.scrollTop = scrollTop;
+            // console.log("window scroll top:", scrollTop)
+            document.documentElement.scrollTop = document.body.scrollHeight - lastScrollDistanceToBottom;
         }
     }, [cachedDataList, infiniteRootRef, useInfinityScroll]);
 
