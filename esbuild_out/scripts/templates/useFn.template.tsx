@@ -137,6 +137,7 @@ export const useGreetingPost = (
     // @ts-ignore
     const resetGreetingOUTStore = useResetAtom(greetingOUTStoreAtom); // <--- Thêm dòng này
     const [loading, setLoading] = useState<boolean>(false)
+    const [error, setError] = useState<ResponseError | Error | null>(null); // <--- THÊM STATE LỖI
     const prevResponse = usePrevious(response);
 
     const abortControllerRef = useRef<AbortController | null>(null);
@@ -250,6 +251,7 @@ export const useGreetingPost = (
         try {
             console.group("🔥 /greeting")
             setLoading(true);
+            setError(null); // <-- XÓA LỖI CŨ KHI BẮT ĐẦU YÊU CẦU MỚI
             if (!api) {
                 setLoading(false)
                 console.error(`greetingApi is undefined`)
@@ -408,43 +410,35 @@ export const useGreetingPost = (
                     return v;
                 case 204:
                     logDev("✅ Received 204 No Content for inData:", currentCallInData);
-                    setResponse(null as any); // Hoặc một giá trị biểu thị "no content"
-                    // Không nên cache giá trị null nếu logic cache không xử lý được
-                    // if (useCachedResponse) {
-                    //     setGreetingOUTStore(pre => ({ ...pre, [cachedKey(currentCallInData)]: null as any }));
-                    // }
+                    setResponse(null as any);
                     return null;
                 default:
                     if (abortAble && localSignal?.aborted) {
                         logDev("Request aborted before reading error value for inData:", currentCallInData);
                         return;
                     }
-                    // Sửa: Xử lý lỗi một cách nhất quán
-                    const errorValue = await greetingResponse.value(); // Thường là { error: ... }
-                    setResponse(errorValue as GreetingOUT); // Cập nhật response với lỗi
+                    const errorValue = await greetingResponse.value();
+                    setError(errorValue as unknown as ResponseError); // <-- SET LỖI TỪ API RESPONSE
+                    setResponse(null as any); // Xóa response cũ
                     if (useCachedResponse) {
-                        // Có thể bạn muốn cache cả lỗi, hoặc xóa cache entry
                         setGreetingOUTStore(pre => omit(pre, [cachedKey(currentCallInData)]));
-                        // Hoặc: setGreetingOUTStore(pre => ({ ...pre, [cachedKey(currentCallInData)]: errorValue as GreetingOUT }));
                     }
                     errorToast(`API Error ${greetingResponse.raw.status} for /greeting`,
                         <pre>{JSON.stringify(errorValue, null, 2)}</pre>);
                     logDev("❌ API Error:", errorValue);
-                    return errorValue; // Trả về lỗi để bên gọi có thể xử lý nếu cần
+                    return errorValue;
             }
 
         } catch (e: any) {
             if (abortAble && (e.name === 'AbortError' || (localSignal && localSignal.aborted))) {
                 logDev("Fetch operation aborted for inData:", currentCallInData, "Error:", e.message);
             } else {
-                // e = e as ResponseError // Không cần ép kiểu ở đây nữa nếu đã xử lý ở default case
+                setError(e); // <-- SET LỖI TỪ EXCEPTION (VD: LỖI MẠNG)
                 if (useCachedResponse) {
                     setGreetingOUTStore(pre => omit(pre, [cachedKey(currentCallInData)]))
                 }
                 console.error("💥 Exception in fire():", e)
-                // Xử lý lỗi chung nếu không phải AbortError
-                // (Ví dụ: lỗi mạng không phải từ API response status)
-                if (e instanceof ResponseError) { // Kiểm tra nếu là ResponseError từ generated client
+                if (e instanceof ResponseError) {
                     const {response: errorResponse} = e;
                     if (!errorResponse) {
                         errorToast(`Network error or no response:`, e.message);
@@ -458,8 +452,6 @@ export const useGreetingPost = (
                 } else {
                     errorToast(`Unexpected error:`, e.message);
                 }
-                // Không throw e ở đây nữa nếu đã xử lý và hiển thị toast
-                // throw e;
             }
         } finally {
             setLoading(false)
@@ -491,12 +483,9 @@ export const useGreetingPost = (
             if (!CustomOUTComponent)
                 return null;
 
-            if (loading || !response) // Sửa: Kiểm tra response có tồn tại không
+            if (loading || !response)
                 return LoadingComponent ? <LoadingComponent/> : <div>loading...</div>;
 
-            // if (!data) { // Đã kiểm tra ở trên
-            //     return EmptyComponent ? <EmptyComponent/> : <div>(data is empty)</div>;
-            // }
             return CustomOUTComponent(response)
         },
         [response, loading, CustomOUTComponent, LoadingComponent, EmptyComponent]
@@ -507,13 +496,10 @@ export const useGreetingPost = (
             if (!CustomResultComponent)
                 return null;
 
-            if (loading || !response?.result) // Sửa: Kiểm tra response và response.result
+            if (loading || !response?.result)
                 return LoadingComponent ? <LoadingComponent/> : <div>loading...</div>;
 
             const data = response?.result;
-            // if (!data) { // Đã kiểm tra ở trên
-            //     return EmptyComponent ? <EmptyComponent/> : <div>(data is empty)</div>;
-            // }
             return CustomResultComponent(data as unknown as OUTResult)
         },
         [response, loading, CustomResultComponent, LoadingComponent, EmptyComponent]
@@ -526,7 +512,7 @@ export const useGreetingPost = (
 
             const data = valueOfOUTResultMaybeData(response?.result);
 
-            if (loading && !data) // Sửa: Hiển thị loading nếu đang load và chưa có data
+            if (loading && !data)
                 return LoadingComponent ? <LoadingComponent/> : <div>loading...</div>;
 
             if (!data) {
@@ -544,7 +530,7 @@ export const useGreetingPost = (
 
             const data = valueOfOUTResultMaybeData(response?.result);
 
-            if (loading && !data) // Sửa: Hiển thị loading nếu đang load và chưa có data
+            if (loading && !data)
                 return LoadingComponent ? <LoadingComponent/> : <div>loading...</div>;
 
             if (!data)
@@ -567,25 +553,18 @@ export const useGreetingPost = (
                 <div className={mainClassName ?? ""}>
                     {
                         data.map((item: OUTResultMaybeDataItem, index) => {
-                            // Sửa: Không cần kiểm tra CustomDataItemComponent nữa vì đã kiểm tra ở đầu hàm
                             return CustomDataItemComponent(item, index)
-                            // Dòng dưới đây sẽ không bao giờ được thực thi nếu CustomDataItemComponent tồn tại
-                            // return (
-                            //     <div className={dataItemClassName ?? ""} key={get(item, 'id', `noID-${index}`)}>
-                            //         {JSON.stringify(item, null, 4)}
-                            //     </div>
-                            // )
                         })
                     }
                 </div>
             )
         },
-        [response, loading, CustomDataItemComponent, mainClassName, /*dataItemClassName,*/ LoadingComponent, EmptyComponent]
+        [response, loading, CustomDataItemComponent, mainClassName, LoadingComponent, EmptyComponent]
     )
 
     const cachedResponse = useMemo(() => {
         const keyLookup = _inData !== undefined ? _inData : inData;
-        if (keyLookup === undefined) return undefined; // Tránh lỗi nếu keyLookup là undefined
+        if (keyLookup === undefined) return undefined;
         return greetingOUTStore[cachedKey(keyLookup)];
     }, [greetingOUTStore, _inData, inData])
 
@@ -605,11 +584,10 @@ export const useGreetingPost = (
             return Object.values(greetingOUTStore)
                 .flatMap(r => {
                     const value = get(r, filterPath);
-                    // Đảm bảo chỉ flatMap nếu value là array, nếu không trả về mảng chứa value đó (nếu có)
                     if (Array.isArray(value)) return value;
                     return value !== undefined && value !== null ? [value] : [];
                 })
-                .filter(item => item !== undefined && item !== null) // Lọc ra các item undefined/null sau flatMap
+                .filter(item => item !== undefined && item !== null)
                 .filter(cachedResponseStoreValuesFilter.fn)
         },
         [greetingOUTStore]
@@ -687,7 +665,6 @@ export const useGreetingPost = (
                 uniqByParam,
             ) as Item[]
         }
-        // console.log({data})
         // filter
         if (dataListConfig.filter) {
             const _filterParams = isPlainObject(dataListConfig.filter) ?
@@ -712,8 +689,8 @@ export const useGreetingPost = (
                  cssDataPathMap: {id: "id"},
              },
              scrollTo = "bottom",
-             scrollIntoViewOptions = true, //{behavior: 'instant', block: 'start'}
-             triggerElementHeight = 1,//px
+             scrollIntoViewOptions = true,
+             triggerElementHeight = 1,
              intersectionObserverOptions,
              viewportRef,
          }: Omit<InfinityScrollHereProps, 'hasMore' | 'isLoading'>) => {
@@ -756,7 +733,6 @@ export const useGreetingPost = (
             return;
         }
 
-        // Tạo inData mới cho lần gọi tiếp theo bằng cách thêm/cập nhật nextCursor
         const newInData = merge(
             _inData,
             {
@@ -776,16 +752,10 @@ export const useGreetingPost = (
         loading,
         hasNextPage: hasMore,
         onLoadMore: loadMoreHandler,
-        // When there is an error, we stop infinite loading.
-        // It can be reactivated by setting "error" state as undefined.
-        disabled: Boolean(loading || !hasMore),
-        // `rootMargin` is passed to `IntersectionObserver`.
-        // We can use it to trigger 'onLoadMore' when the sentry comes near to become
-        // visible, instead of becoming fully visible on the screen.
+        disabled: Boolean(loading || !hasMore || error), // <-- VÔ HIỆU HÓA NẾU CÓ LỖI
         // rootMargin: rootMargin,
     });
 
-    // We keep the scroll position when new items are added etc.
     const isReverseScroll = useMemo(
         () => ['top', 'left'].includes(infiniteScrollConfig?.scrollTo ?? ''),
         [infiniteScrollConfig?.scrollTo]
@@ -800,16 +770,10 @@ export const useGreetingPost = (
                 scrollHeight,
                 scrollTop
             } = scrollableRootRef.current;
-            // console.log("❌ CURRENT root scroll:", {
-            //     scrollHeight,
-            //     scrollTop
-            // })
             const newRootScrollTop = scrollHeight - lastScrollDistanceToBottom;
-            // console.log("✅ NEW root scroll", {newRootScrollTop});
             if (newRootScrollTop > 0)
                 scrollableRootRef.current.scrollTop = newRootScrollTop;
         } else {
-            // console.log("window scroll top:", scrollTop)
             document.documentElement.scrollTop = document.body.scrollHeight - lastScrollDistanceToBottom;
         }
     }, [cachedDataList, infiniteRootRef, useInfinityScroll]);
@@ -878,9 +842,10 @@ export const useGreetingPost = (
         abort,
         setInData,
         loading,
+        error, // <--- EXPORT LỖI RA NGOÀI
         api,
         cachedResponseStore: greetingOUTStore,
-        resetCachedResponseStore: resetGreetingOUTStore, // <--- Thêm hàm reset vào đây
+        resetCachedResponseStore: resetGreetingOUTStore,
         cachedResponseStoreFilteredValues,
         cachedResponse,
         DataItemComponent,
