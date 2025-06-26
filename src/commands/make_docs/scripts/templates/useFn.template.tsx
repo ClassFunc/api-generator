@@ -27,8 +27,11 @@ type OUTResult = Unpacked<GreetingOUT['result']>
 type Result = OUTResult;
 
 export type OUTResultMaybeData = OUTResult extends { data: infer U }
-    ? U
-    : OUTResult
+    ? U :
+    OUTResult extends { docs: infer U2 }
+        ? U2
+        : OUTResult
+
 export type OUTResultMaybeDataItem = Unpacked<OUTResultMaybeData>
 type Data = OUTResultMaybeData;
 export type Item = OUTResultMaybeDataItem;
@@ -619,20 +622,20 @@ export const useGreetingPost = (
         return response.result as unknown as Result;
     }, [response])
 
-    const getDataFn = (response?: OUT, dataPath?: keyof Result | string) => {
+    const getDataFn = (response?: OUT, dataPath?: keyof Result | string, defaultValues: any = null) => {
         const result = response?.result as unknown as Result;
         if (!result || !dataPath || !isObject(result))
             return null;
         if (dataPath && dataPath in result) {
-            return get(result, dataPath, null) as unknown as Data;
+            return get(result, dataPath, defaultValues) as unknown as Data;
         }
-        return get(response, dataPath, null) as unknown as Data;
+        return get(response, dataPath, defaultValues) as unknown as Data;
     }
     const data = useMemo(() => {
         if (!response) {
-            return null
+            return []
         }
-        return getDataFn(response, dataPath)
+        return getDataFn(response, dataPath, []) as OUTResultMaybeData;
     }, [response, dataPath])
 
     const hasMore = useMemo(() => {
@@ -889,6 +892,7 @@ export const useGreetingPost = (
         nextCursor,
         count,
         data,
+        docs: data,
         cachedDataList,
         dataList: cachedDataList,
         InfinityScrollHere,
