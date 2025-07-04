@@ -437,18 +437,25 @@ export const useGreetingPost = (
                 if (useCachedResponse) {
                     setGreetingOUTStore(pre => omit(pre, [cachedKey(currentCallInData)]))
                 }
-                console.error("💥 Exception in fire():", e)
+                // console.error("💥 Exception in fire() `greetingPost`:", e)
                 if (e instanceof ResponseError) {
                     const {response: errorResponse} = e;
                     if (!errorResponse) {
                         errorToast(`Network error or no response:`, e.message);
                         return;
                     }
-                    const serror = (await errorResponse?.json())?.error;
+                    let errJson = await errorResponse?.json()
                     errorToast(
-                        `Call API \`greetingPost\` error: ${errorResponse.status} (${get(serror, 'status')})`,
-                        <pre>{get(serror, 'message')}</pre>
-                    );
+                        `
+💥 Call API \`greetingPost\` error:
+STATUS: ${errorResponse.status}
+>> 🚩 IN DATA >>
+${JSON.stringify(currentCallInData, null, 2)}
+<< 🚩 END IN DATA <<
+>> 🟥 ERROR DETAILS >>
+${JSON.stringify(errJson, null, 2)}
+<< 🟥 END ERROR DETAILS <<
+`);
                 } else {
                     errorToast(`Unexpected error:`, e.message);
                 }
