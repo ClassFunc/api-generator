@@ -30,7 +30,7 @@ export type OUTResultMaybeData = OUTResult extends { data: infer U }
     ? U :
     OUTResult extends { docs: infer U2 }
         ? U2
-        : OUTResult
+        : unknown;
 
 export type OUTResultMaybeDataItem = Unpacked<OUTResultMaybeData>
 type Data = OUTResultMaybeData;
@@ -448,7 +448,11 @@ export const useGreetingPost = (
                     errorToast(
                         `
 💥 Call API \`greetingPost\` error:
-STATUS: ${errorResponse.status}
+URL: ${errorResponse.url}
+STATUS: ${errorResponse.status} ${errorResponse.statusText}
+>>　👷 RESPONSE HEADERS >>
+${JSON.stringify(Object.fromEntries(e.response.headers.entries()), null, 2)}
+<< 👷 END RESPONSE HEADERS <<
 >> 🚩 IN DATA >>
 ${JSON.stringify(currentCallInData, null, 2)}
 << 🚩 END IN DATA <<
