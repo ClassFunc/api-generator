@@ -445,21 +445,28 @@ export const useGreetingPost = (
                         return;
                     }
                     let errJson = await errorResponse?.json()
-                    errorToast(
-                        `
-💥 Call API \`greetingPost\` error:
-URL: ${errorResponse.url}
-STATUS: ${errorResponse.status} ${errorResponse.statusText}
->>　👷 RESPONSE HEADERS >>
-${JSON.stringify(Object.fromEntries(e.response.headers.entries()), null, 2)}
-<< 👷 END RESPONSE HEADERS <<
->> 🚩 IN DATA >>
-${JSON.stringify(currentCallInData, null, 2)}
-<< 🚩 END IN DATA <<
->> 🟥 ERROR DETAILS >>
-${JSON.stringify(errJson, null, 2)}
-<< 🟥 END ERROR DETAILS <<
-`);
+                    if (errJson) {
+                        setError(errJson);
+                    }
+                    const errMsg = get(errJson, 'message')
+                    if (errMsg) {
+                        errorToast(errMsg);
+                    }
+//                     console.error(
+//                         `
+// 💥 Call API \`greetingPost\` error:
+// URL: ${errorResponse.url}
+// STATUS: ${errorResponse.status} ${errorResponse.statusText}
+// >>　👷 RESPONSE HEADERS >>
+// ${JSON.stringify(Object.fromEntries(e.response.headers.entries()), null, 2)}
+// << 👷 END RESPONSE HEADERS <<
+// >> 🚩 IN DATA >>
+// ${JSON.stringify(currentCallInData, null, 2)}
+// << 🚩 END IN DATA <<
+// >> 🟥 ERROR DETAILS >>
+// ${JSON.stringify(errJson, null, 2)}
+// << 🟥 END ERROR DETAILS <<
+// `);
                 } else {
                     errorToast(`Unexpected error:`, e.message);
                 }
