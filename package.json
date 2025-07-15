@@ -1,6 +1,6 @@
 {
   "name": "apiyaml",
-  "version": "2.2.2",
+  "version": "2.2.3",
   "description": "api generator",
   "main": "esbuild_out/index.js",
   "scripts": {

@@ -433,11 +433,10 @@ export const useGreetingPost = (
             if (abortAble && (e.name === 'AbortError' || (localSignal && localSignal.aborted))) {
                 logDev("Fetch operation aborted for inData:", currentCallInData, "Error:", e.message);
             } else {
-                setError(e); // <-- SET LỖI TỪ EXCEPTION (VD: LỖI MẠNG)
+                // console.error("💥 Exception in fire() `greetingPost`:", e)
                 if (useCachedResponse) {
                     setGreetingOUTStore(pre => omit(pre, [cachedKey(currentCallInData)]))
                 }
-                // console.error("💥 Exception in fire() `greetingPost`:", e)
                 if (e instanceof ResponseError) {
                     const {response: errorResponse} = e;
                     if (!errorResponse) {
@@ -468,6 +467,7 @@ export const useGreetingPost = (
 // << 🟥 END ERROR DETAILS <<
 // `);
                 } else {
+                    setError(e); // <-- SET LỖI TỪ EXCEPTION (VD: LỖI MẠNG)
                     errorToast(`Unexpected error:`, e.message);
                 }
             }
