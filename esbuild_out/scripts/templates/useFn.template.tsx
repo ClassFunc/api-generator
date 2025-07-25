@@ -30,7 +30,7 @@ export type OUTResultMaybeData = OUTResult extends { data: infer U }
     ? U :
     OUTResult extends { docs: infer U2 }
         ? U2
-        : unknown;
+        : any;
 
 export type OUTResultMaybeDataItem = Unpacked<OUTResultMaybeData>
 type Data = OUTResultMaybeData;
