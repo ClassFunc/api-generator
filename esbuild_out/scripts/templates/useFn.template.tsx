@@ -21,6 +21,8 @@ import {InfinityScrollHereComponent, InfinityScrollHereProps} from "./InfinitySc
 import useInfiniteScroll from "react-infinite-scroll-hook";
 import {InfinityLoading} from "./InfinityLoading";
 import {DynamicForm, DynamicFormProps} from "./InputForm";
+
+// @ts-ignore
 import {GreetingIN_defaultValues, GreetingINData_schema} from "../zodSchemas/Greeting_schema";
 
 type INData = Unpacked<GreetingIN['data']>

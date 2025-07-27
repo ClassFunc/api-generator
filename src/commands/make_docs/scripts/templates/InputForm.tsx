@@ -7,7 +7,9 @@ import {startCase} from 'lodash';
 import {JSX, ReactNode, useState, useTransition} from 'react';
 
 import {getHtmlInputType, getUiMetadata, getZodInnerType} from './InputFormHelpers';
+// @ts-ignore
 import defaultFormStyles from './InputForm.module.css';
+import React from 'react';
 
 // --- Định nghĩa Types cho Props ---
 type SubmitHook<TData extends FieldValues> = (options?: { fireImmediately?: boolean }) => {
