@@ -36,6 +36,18 @@ fs.copyFileSync(
     path.resolve(templatesDir, `InfinityLoading.tsx`),
     path.resolve(usesDir, `InfinityLoading.tsx`),
 )
+fs.copyFileSync(
+    path.resolve(templatesDir, `InputForm.module.css`),
+    path.resolve(usesDir, `InputForm.module.css`),
+)
+fs.copyFileSync(
+    path.resolve(templatesDir, `InputForm.tsx`),
+    path.resolve(usesDir, `InputForm.tsx`),
+)
+fs.copyFileSync(
+    path.resolve(templatesDir, `InputFormHelpers.tsx`),
+    path.resolve(usesDir, `InputFormHelpers.tsx`),
+)
 // fs.mkdirSync(
 //     path.resolve(usesDir, `InfiniteScrollers`),
 //     {recursive: true},

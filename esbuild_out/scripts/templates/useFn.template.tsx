@@ -20,6 +20,8 @@ import {
 import {InfinityScrollHereComponent, InfinityScrollHereProps} from "./InfinityScrollHereComponent";
 import useInfiniteScroll from "react-infinite-scroll-hook";
 import {InfinityLoading} from "./InfinityLoading";
+import {DynamicForm, DynamicFormProps} from "./InputForm";
+import {GreetingIN_defaultValues, GreetingINData_schema} from "../zodSchemas/Greeting_schema";
 
 type INData = Unpacked<GreetingIN['data']>
 type OUT = GreetingOUT;
@@ -66,6 +68,8 @@ type InfiniteScrollConfig = {
     scrollTo?: "bottom" | "top" | "right" | "left";
 }
 
+type FormPropsType = Omit<DynamicFormProps<any>, 'formSchema' | 'useSubmitHook'>;
+
 interface Props extends ResultDataInnerComponentProps, ApiConfigParamsProps {
     inData?: INData;
     stream?: boolean;
@@ -88,6 +92,8 @@ interface Props extends ResultDataInnerComponentProps, ApiConfigParamsProps {
     infiniteScrollConfig?: InfiniteScrollConfig;
     dataListConfig?: DataListConfig;
     inDataDebugger?: boolean;
+    useForm?: boolean;
+    formProps?: FormPropsType;
 }
 
 type IGreetingResponseAtom = Record<string, GreetingOUT>;
@@ -124,17 +130,17 @@ export const useGreetingPost = (
         infiniteScrollConfig,
         dataListConfig = {uniqBy: "id"},
         inDataDebugger = false,
+        useForm = false,
+        formProps = {},
     }: Props
 ) => {
     const {api} = useGreetingApi(apiConfigParams, apiConfigOptions);
     const [_inData, setInData] = useAtom<INData | undefined>(useDeepCompareMemo(() => atom(inData), [inData]));
     // @ts-ignore
     const [response, setResponse] = useAtom<GreetingOUT>(lastGreetingOUTAtom)
-    // @ts-ignore
     const resetResponse = useResetAtom(lastGreetingOUTAtom)
     const [streamResponseStore, setStreamResponseStore] = useState<any[]>([])
     const [greetingOUTStore, setGreetingOUTStore] = useAtom(greetingOUTStoreAtom)
-    // @ts-ignore
     const resetGreetingOUTStore = useResetAtom(greetingOUTStoreAtom); // <--- Thêm dòng này
     const [loading, setLoading] = useState<boolean>(false)
     const [error, setError] = useState<ResponseError | Error | null>(null); // <--- THÊM STATE LỖI
@@ -334,7 +340,7 @@ export const useGreetingPost = (
                                         setStreamResponseStore(prev => [...prev, j])
                                     } catch (e: any) {
                                         const lastChunks = chunkText.split(/\r\n|\n|\r/g)
-                                        logDev({lastChunks})
+                                        // logDev({lastChunks})
                                         for (let c of lastChunks) {
                                             c = c.trim();
                                             if (!c) {
@@ -849,6 +855,22 @@ export const useGreetingPost = (
 
     /* END Scroll Region */
 
+    /* START form*/
+    const Form = useCallback((props: FormPropsType) => {
+        if (!useForm)
+            return;
+
+        return (
+            <DynamicForm
+                formSchema={GreetingINData_schema}
+                defaultValues={GreetingIN_defaultValues.data}
+                useSubmitHook={useGreetingPost as any}
+                {...({...formProps, ...props})}
+            />
+        )
+    }, [useForm])
+    /* END form*/
+
     return {
         response,
         responseSWR,
@@ -885,5 +907,6 @@ export const useGreetingPost = (
         rootRefSetter,
         scrollableRootRef,
         handleRootScroll,
+        Form,
     }
 }
