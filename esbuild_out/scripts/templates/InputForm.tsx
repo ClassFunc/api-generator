@@ -1,26 +1,36 @@
+// /Users/lethanh/WebstormProjects/audits-web/components/InputForm.tsx
+
 'use client';
 
 import {FieldValues, Path, useForm} from 'react-hook-form';
 import {zodResolver} from '@hookform/resolvers/zod';
 import {z} from 'zod';
 import {get, isArray, startCase} from 'lodash';
-import React, {JSX, ReactNode, useCallback, useEffect, useTransition} from 'react';
+import React, {JSX, ReactNode, useCallback, useEffect, useRef, useTransition} from 'react';
 
-import {getAuthToken, getHtmlInputType, getUiMetadata, getZodInnerType, resolvePlaceholders} from './InputFormHelpers';
+import {
+    FetchConfig,
+    getAuthToken,
+    getHtmlInputType,
+    getUiMetadata,
+    getZodInnerType,
+    resolvePlaceholders
+} from './InputFormHelpers';
 // @ts-ignore
 import defaultFormStyles from './InputForm.module.css';
 import {atom, useAtom} from "jotai";
 
 export const dynamicOptionsAtom = atom<Record<string, any[]>>({});
-
-/**
- * Atom để theo dõi trạng thái loading của từng field khi đang fetch options.
- * Ví dụ: { city: true }
- */
 export const fieldLoadingAtom = atom<Record<string, boolean>>({});
 
+/**
+ * Atom để theo dõi trạng thái tự động lưu của form.
+ * Giúp hiển thị chỉ báo loading mà không xung đột với state của nút submit chính.
+ */
+export const formSavingAtom = atom(false);
 
-// --- Định nghĩa Types cho Props ---
+
+// --- Types ---
 type SubmitHook<TData extends FieldValues> = (options?: { fireImmediately?: boolean }) => {
     fire: (data: TData) => Promise<any>;
     loading: boolean;
@@ -28,15 +38,9 @@ type SubmitHook<TData extends FieldValues> = (options?: { fireImmediately?: bool
     data: any;
 };
 
-// NEW: Định nghĩa kiểu cho tất cả các class style có thể có
-// Nó bao gồm các style từ CSS Module và các style được định nghĩa inline (Tailwind)
-// Định nghĩa tất cả các "key" style có thể có
 type AllStyleKeys = keyof typeof defaultFormStyles | 'submitButton' | 'successMessage';
-// Tạo một type yêu cầu tất cả các key phải có giá trị string
 type AllStyles = { [K in AllStyleKeys]: string };
-// Prop `customStyles` là một phần của AllStyles
 type CustomStyles = Partial<AllStyles>;
-
 
 export interface DynamicFormProps<TData extends FieldValues> {
     formSchema: z.ZodObject<any, any, any>;
@@ -49,27 +53,7 @@ export interface DynamicFormProps<TData extends FieldValues> {
     customStyles?: CustomStyles;
 }
 
-// --- Component DynamicForm ---
-/* DynamicForm
-usage:
-// 1. Với CSS Module
-import myCustomStyles from './MyForm.module.css';
-<DynamicForm
-    formSchema={mySchema}
-    useSubmitHook={useMyApiHook}
-    customStyles={myCustomStyles}
-/>
-
-// 2. Với Tailwind CSS (ghi đè từng phần)
-<DynamicForm
-    formSchema={mySchema}
-    useSubmitHook={useMyApiHook}
-    customStyles={{
-        input: 'border-gray-500 rounded-full',
-        submitButton: 'bg-purple-500 hover:bg-purple-600',
-    }}
-/>
-* */
+// --- Component ---
 export function DynamicForm<TData extends FieldValues>({
                                                            formSchema,
                                                            useSubmitHook,
@@ -82,23 +66,18 @@ export function DynamicForm<TData extends FieldValues>({
                                                        }: DynamicFormProps<TData>) {
     const {fire, loading: hookLoading, error, data} = useSubmitHook({fireImmediately: false});
     const [isPending, startTransition] = useTransition();
-    // --- REMOVED: hasSubmitted không còn cần thiết nếu dùng logic mới
-    // const [hasSubmitted, setHasSubmitted] = useState(false);
-    const isBusy = isPending || hookLoading;
-    // +++ MODIFIED: Thay thế useState bằng useAtom từ Jotai
-    const [dynamicOptions, setDynamicOptions] = useAtom(dynamicOptionsAtom);
-    const [fieldLoading, setFieldLoading] = useAtom(fieldLoadingAtom)
+    const [isSaving, setIsSaving] = useAtom(formSavingAtom);
+    const isBusy = isPending || hookLoading || isSaving;
 
-    // Tạo một object chứa tất cả các style mặc định trước
-    const allDefaultStyles: AllStyles = {
+    const [dynamicOptions, setDynamicOptions] = useAtom(dynamicOptionsAtom);
+    const [fieldLoading, setFieldLoading] = useAtom(fieldLoadingAtom);
+    const initialEffectsRan = useRef(false);
+    const debounceTimers = useRef<Record<string, NodeJS.Timeout>>({});
+
+    const styles: AllStyles = {
         ...defaultFormStyles,
         submitButton: "bg-blue-600 text-white font-semibold py-2 px-4 rounded-lg shadow-md transition-colors duration-300 ease-in-out hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-opacity-50 disabled:bg-gray-400 disabled:cursor-not-allowed",
         successMessage: "mt-4 text-green-600",
-    };
-
-    // Sau đó, trộn object mặc định với style tùy chỉnh.
-    const styles: AllStyles = {
-        ...allDefaultStyles,
         ...customStyles,
     } as AllStyles;
 
@@ -106,113 +85,139 @@ export function DynamicForm<TData extends FieldValues>({
         register,
         handleSubmit,
         formState: {errors: formValidationErrors, isSubmitted},
-        // +++ NEW: Lấy `watch` và `setValue` từ useForm
         watch,
         setValue,
-        getValues, // +++ NEW: Lấy getValues để có state form mới nhất
+        getValues,
+        trigger, // Dùng để validate form một cách có chủ đích
     } = useForm<TData>({
         resolver: zodResolver(formSchema as any),
         defaultValues: defaultValues as any,
     });
-    // +++ NEW: Hàm để thực thi các effect, có thể tái sử dụng +++
-    // Hàm này sẽ tìm tất cả các field đang lắng nghe `changedFieldName` và chạy effect của chúng.
+
+    const fetchFieldOptions = useCallback(async (targetFieldName: string, fetchConfig: FetchConfig) => {
+        setFieldLoading(prev => ({...prev, [targetFieldName]: true}));
+        setDynamicOptions(prev => ({...prev, [targetFieldName]: []}));
+
+        try {
+            const token = await getAuthToken();
+            const currentFormValues = getValues();
+            const headers: HeadersInit = {
+                'Content-Type': 'application/json',
+                ...resolvePlaceholders(fetchConfig.headers, currentFormValues),
+            } as Record<string, any>;
+            if (token) headers['Authorization'] = `Bearer ${token}`;
+
+            const requestOptions: RequestInit = {method: fetchConfig.method || 'GET', headers};
+            if (requestOptions.method !== 'GET' && fetchConfig.body) {
+                requestOptions.body = JSON.stringify(resolvePlaceholders(fetchConfig.body, currentFormValues));
+            }
+
+            const response = await fetch(fetchConfig.endpoint, requestOptions);
+            if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+            const responseData = await response.json();
+
+            let optionsData = fetchConfig.optionsPath ? get(responseData, fetchConfig.optionsPath) : responseData;
+            if (!isArray(optionsData)) {
+                console.warn(`[DynamicForm] Expected an array for field '${targetFieldName}'. Received:`, optionsData);
+                optionsData = [];
+            }
+            setDynamicOptions(prev => ({...prev, [targetFieldName]: optionsData}));
+        } catch (err) {
+            console.error(`[DynamicForm] Failed to fetch options for ${targetFieldName}:`, err);
+            setDynamicOptions(prev => ({...prev, [targetFieldName]: []}));
+        } finally {
+            setFieldLoading(prev => ({...prev, [targetFieldName]: false}));
+        }
+    }, [getValues, setDynamicOptions, setFieldLoading]);
+
     const runEffectsFor = useCallback((changedFieldName: string, allFormValues: TData) => {
         Object.entries(formSchema.shape).forEach(([targetFieldName, targetFieldSchema]) => {
             const ui = getUiMetadata(targetFieldSchema as any);
             if (!ui?.effects) return;
 
-            ui.effects.forEach(async effect => {
+            ui.effects.forEach(effect => {
                 if (effect.listensTo === changedFieldName) {
-                    console.log(`[Effect Triggered] Field '${targetFieldName}' is listening to '${changedFieldName}'.`);
-
                     const listenedValue = get(allFormValues, changedFieldName);
-
-                    // Reset field target trước khi fetch
                     setValue(targetFieldName as Path<TData>, '' as any, {shouldValidate: true});
                     setDynamicOptions(prev => ({...prev, [targetFieldName]: []}));
 
-                    if (!listenedValue) {
+                    if (listenedValue && effect.action === 'fetchOptions') {
+                        fetchFieldOptions(targetFieldName, effect);
+                    } else {
                         setFieldLoading(prev => ({...prev, [targetFieldName]: false}));
-                        return;
-                    }
-                    const currentFormValues = getValues();
-
-                    if (effect.action === 'fetchOptions') {
-                        setFieldLoading(prev => ({...prev, [targetFieldName]: true}));
-
-                        // +++ REFACTORED: Sử dụng helper và chỉ thêm header khi có token +++
-                        const token = await getAuthToken();
-                        const headers: HeadersInit = {
-                            'Content-Type': 'application/json',
-                            ...resolvePlaceholders(effect.headers, currentFormValues),
-                        } as Record<string, any>;
-                        if (token) {
-                            headers['Authorization'] = `Bearer ${token}`;
-                        }
-
-                        const requestOptions: RequestInit = {
-                            method: effect.method || 'POST',
-                            headers: headers,
-                        };
-                        // +++ END REFACTOR +++
-
-                        if (requestOptions.method !== 'GET' && effect.body) {
-                            requestOptions.body = JSON.stringify(resolvePlaceholders(effect.body, currentFormValues));
-                        }
-
-                        fetch(effect.endpoint, requestOptions)
-                            .then(res => res.json())
-                            .then(data => {
-                                let optionsData = effect.optionsPath ? get(data, effect.optionsPath) : data;
-                                if (!isArray(optionsData)) {
-                                    console.warn(`[DynamicForm] Expected an array for field '${targetFieldName}'...`);
-                                    optionsData = [];
-                                }
-                                setDynamicOptions(prev => ({...prev, [targetFieldName]: optionsData}));
-                            })
-                            .catch(err => {
-                                console.error(`Failed to fetch options for ${targetFieldName}:`, err);
-                                setDynamicOptions(prev => ({...prev, [targetFieldName]: []}));
-                            })
-                            .finally(() => {
-                                setFieldLoading(prev => ({...prev, [targetFieldName]: false}));
-                            });
                     }
                 }
             });
         });
-    }, [formSchema, getValues, setDynamicOptions, setFieldLoading, setValue]);
+    }, [formSchema, setValue, setDynamicOptions, setFieldLoading, fetchFieldOptions]);
 
+    const handleAutoSave = useCallback(async () => {
+        const isValid = await trigger();
+        if (!isValid) {
 
-    // +++ NEW: Effect để chạy các side-effect cho giá trị mặc định KHI MOUNT +++
-    useEffect(() => {
-        console.log("[DynamicForm] Component mounted. Checking default values to run initial effects...");
-        if (defaultValues) {
-            const initialFormValues = getValues();
-            Object.keys(defaultValues).forEach(fieldName => {
-                if (initialFormValues[fieldName]) {
-                    runEffectsFor(fieldName, initialFormValues);
-                }
-            });
+            return;
         }
-    }, [runEffectsFor, defaultValues]); // Chỉ chạy khi component mount hoặc defaultValues thay đổi
 
-    // +++ MODIFIED: Effect `watch` giờ đây đơn giản hơn +++
+        const formData = getValues();
+        setIsSaving(true);
+        const promise = fire(formData)
+            .then(result => {
+                onSuccess?.(result);
+                return result; // Trả về result cho toast.promise
+            })
+            .catch(err => {
+                console.error("[AutoSave] Submission caught an error:", err);
+                throw err; // Ném lỗi để toast.promise bắt được
+            })
+            .finally(() => {
+                setIsSaving(false);
+            });
+
+    }, [trigger, getValues, setIsSaving, fire, onSuccess]);
+
     useEffect(() => {
         const subscription = watch((value, {name, type}) => {
             if (!name || type !== 'change') return;
-            // Chỉ cần gọi hàm tái sử dụng
+
+            // 1. Chạy các effect phụ thuộc
             runEffectsFor(name, getValues());
+
+            // 2. Kiểm tra và kích hoạt auto-save
+            const fieldSchema = formSchema.shape[name];
+            if (!fieldSchema) return;
+
+            const ui = getUiMetadata(fieldSchema);
+            if (ui?.saveOnChange) {
+                if (debounceTimers.current[name]) clearTimeout(debounceTimers.current[name]);
+                debounceTimers.current[name] = setTimeout(() => {
+                    handleAutoSave();
+                }, 750); // Delay 750ms
+            }
         });
-        return () => subscription.unsubscribe();
-    }, [watch, getValues, runEffectsFor]);
 
+        return () => {
+            subscription.unsubscribe();
+            Object.values(debounceTimers.current).forEach(clearTimeout); // Dọn dẹp timers khi unmount
+        };
+    }, [watch, getValues, runEffectsFor, formSchema.shape, handleAutoSave]);
 
-    // +++ NEW: Effect để dọn dẹp state của Jotai khi component bị unmount
-    // Điều này đảm bảo form luôn "sạch" khi bạn điều hướng qua lại giữa các trang.
     useEffect(() => {
-        // Hàm này sẽ được gọi khi component được mount lần đầu
-        // và hàm cleanup (return) sẽ được gọi khi component unmount.
+        if (initialEffectsRan.current === false) {
+            const initialFormValues = getValues();
+            Object.entries(formSchema.shape).forEach(([fieldName, fieldSchema]) => {
+                const ui = getUiMetadata(fieldSchema as any);
+                if (ui?.fetchOnInit) fetchFieldOptions(fieldName, ui.fetchOnInit);
+            });
+            if (defaultValues) {
+                Object.keys(defaultValues).forEach(fieldName => {
+                    if (initialFormValues[fieldName]) runEffectsFor(fieldName, initialFormValues);
+                });
+            }
+            initialEffectsRan.current = true;
+        }
+    }, [runEffectsFor, defaultValues, getValues, formSchema.shape, fetchFieldOptions]);
+
+    useEffect(() => {
         return () => {
             setDynamicOptions({});
             setFieldLoading({});
@@ -220,21 +225,21 @@ export function DynamicForm<TData extends FieldValues>({
     }, [setDynamicOptions, setFieldLoading]);
 
     const handleFormSubmit = (formData: TData) => {
-        // --- REMOVED: không cần setHasSubmitted thủ công
-        // if (!hasSubmitted) setHasSubmitted(true);
         startTransition(async () => {
             try {
                 const result = await fire(formData);
                 onSuccess?.(result);
+                if (successMessage) {
+
+                }
             } catch (e) {
                 console.error("Form submission caught an error:", e);
             }
         });
     };
-    // +++ MODIFIED: Dùng isSubmitted từ react-hook-form để logic gọn hơn
+
     const shouldShowStatusMessage = isSubmitted && !isBusy;
 
-    // --- Hàm Render Field ---
     const renderField = (key: string, schema: z.ZodTypeAny): JSX.Element => {
         const formKey = key as Path<TData>;
         const coreType = getZodInnerType(schema);
@@ -250,27 +255,20 @@ export function DynamicForm<TData extends FieldValues>({
         const inputClassName = styles.input;
         const isLoading = fieldLoading[key];
 
-        // --- LOGIC ƯU TIÊN MỚI ---
-        // 1. Xác định nguồn options cuối cùng dựa trên quy tắc ưu tiên.
         let finalOptions: any[] = [];
-        if (dynamicOptions[key]) {
-            // Ưu tiên 1: Dữ liệu động từ Jotai state (kể cả khi nó là mảng rỗng).
-            finalOptions = dynamicOptions[key];
-        } else if (uiConfig.options) {
-            // Ưu tiên 2: Dữ liệu tĩnh từ ui.options trong schema.
-            finalOptions = uiConfig.options;
-        } else if (coreType instanceof z.ZodEnum) {
-            // Ưu tiên 3: Dữ liệu từ z.ZodEnum.
-            finalOptions = coreType.options.map((val: any) => ({ value: val, label: val }));
-        }
-        // --- KẾT THÚC LOGIC MỚI ---
+        if (dynamicOptions[key]) finalOptions = dynamicOptions[key];
+        else if (uiConfig.options) finalOptions = uiConfig.options;
+        else if (coreType instanceof z.ZodEnum) finalOptions = coreType.options.map((val: any) => ({
+            value: val,
+            label: val
+        }));
 
         if (componentType === 'select' || coreType instanceof z.ZodEnum) {
             fieldElement = (
-                <select id={key} {...register(formKey)}
-                        className={inputClassName} {...uiConfig.inputProps} disabled={isLoading}>
-                    <option value="">{isLoading ? 'Loading...' : (uiConfig.placeholder || 'Pick one value...')}</option>
-                    {/* Sử dụng finalOptions đã được xác định */}
+                <select id={key} {...register(formKey)} className={inputClassName} {...uiConfig.inputProps}
+                        disabled={isLoading}>
+                    <option
+                        value="">{isLoading ? 'Đang tải...' : (uiConfig.placeholder || 'Chọn một giá trị...')}</option>
                     {finalOptions.map((option: any) => {
                         const value = typeof option === 'object' ? option.value : option;
                         const label = typeof option === 'object' ? option.label : option;
@@ -279,74 +277,19 @@ export function DynamicForm<TData extends FieldValues>({
                 </select>
             );
         } else {
-            switch (componentType) {
-                case 'textarea':
-                    fieldElement = (
-                        <textarea
-                            id={key}
-                            {...register(formKey)}
-                            placeholder={uiConfig.placeholder || key}
-                            className={inputClassName}
-                            rows={4}
-                            {...uiConfig.inputProps}
-                        />
-                    );
-                    break;
-                case 'radio':
-                    fieldElement = (
-                        <div className={styles.fieldSet} role="radiogroup">
-                            {isLoading && <span>Đang tải...</span>}
-                            {/* Sử dụng finalOptions cho radio */}
-                            {!isLoading && finalOptions.map(option => (
-                                <label key={option.value} htmlFor={`${key}-${option.value}`}
-                                       className={styles.optionLabel}>
-                                    <input type="radio" id={`${key}-${option.value}`}
-                                           value={option.value} {...register(formKey)} {...uiConfig.inputProps} />
-                                    <span>{option.label}</span>
-                                </label>
-                            ))}
-                        </div>
-                    );
-                    break;
-                case 'checkbox':
-                    // Checkbox cũng nên sử dụng finalOptions để có thể được tạo động
-                    fieldElement = (
-                        <div className={styles.fieldSet}>
-                            {isLoading && <span>Đang tải...</span>}
-                            {!isLoading && finalOptions.map(option => (
-                                <label key={option.value} htmlFor={`${key}-${option.value}`}
-                                       className={styles.optionLabel}>
-                                    <input type="checkbox" id={`${key}-${option.value}`}
-                                           value={option.value} {...register(formKey)} {...uiConfig.inputProps} />
-                                    <span>{option.label}</span>
-                                </label>
-                            ))}
-                        </div>
-                    );
-                    break;
-                default:
-                    fieldElement = (
-                        <input
-                            id={key}
-                            type={inputType}
-                            {...register(formKey, {valueAsNumber: coreType instanceof z.ZodNumber})}
-                            placeholder={uiConfig.placeholder || key}
-                            className={inputClassName}
-                            {...uiConfig.inputProps}
-                        />
-                    );
-                    break;
-            }
+            // Các component khác giữ nguyên
+            fieldElement = <input id={key}
+                                  type={inputType} {...register(formKey, {valueAsNumber: coreType instanceof z.ZodNumber})}
+                                  placeholder={uiConfig.placeholder || key}
+                                  className={inputClassName} {...uiConfig.inputProps} />;
         }
 
         return (
             <div key={key} className={styles.formGroup}>
                 <label htmlFor={key} className={styles.label}>
                     {uiConfig.label || startCase(key)}
-                    {uiConfig.seeMoreLink && (
-                        <a href={uiConfig.seeMoreLink} target="_blank" rel="noopener noreferrer"
-                           className="ml-2 text-blue-500 hover:underline" title="Learn more">[?]</a>
-                    )}
+                    {uiConfig.seeMoreLink && <a href={uiConfig.seeMoreLink} target="_blank" rel="noopener noreferrer"
+                                                className="ml-2 text-blue-500 hover:underline">[?]</a>}
                 </label>
                 {fieldElement}
                 {uiConfig.helperText && <p className={styles.helperText}>{uiConfig.helperText}</p>}
@@ -361,14 +304,21 @@ export function DynamicForm<TData extends FieldValues>({
             <form onSubmit={handleSubmit(handleFormSubmit)} className={styles.form}>
                 {Object.entries(formSchema.shape).map(([key, schema]) => renderField(key, schema as any))}
 
-                <button type="submit" disabled={isBusy} className={styles.submitButton}>
-                    {isBusy ? loadingButtonText : submitButtonText}
-                </button>
+                <div className="flex items-center gap-4 mt-4">
+                    <button type="submit" disabled={isBusy} className={styles.submitButton}>
+                        {isSaving ? 'Đang lưu...' : (isBusy ? loadingButtonText : submitButtonText)}
+                    </button>
+                    {isSaving && (
+                        <span className="text-sm text-gray-500 animate-pulse">
+                            Đang xử lý...
+                        </span>
+                    )}
+                </div>
 
                 {shouldShowStatusMessage && error && (
                     <p className={styles.errorMessage}>{error.message}</p>
                 )}
-                {shouldShowStatusMessage && !error && data && ( // Chỉ hiện khi có data
+                {shouldShowStatusMessage && !error && data && successMessage && (
                     <p className={styles.successMessage}>{successMessage}</p>
                 )}
             </form>

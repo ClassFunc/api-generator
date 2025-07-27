@@ -864,7 +864,7 @@ export const useGreetingPost = (
 
         return (
             <DynamicForm
-                formSchema={GreetingINData_schema}
+                formSchema={GreetingINData_schema as any}
                 defaultValues={GreetingIN_defaultValues.data}
                 useSubmitHook={useGreetingPost as any}
                 {...({...formProps, ...props})}
