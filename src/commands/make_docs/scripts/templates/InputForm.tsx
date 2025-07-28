@@ -1,5 +1,3 @@
-// /Users/lethanh/WebstormProjects/audits-web/components/InputForm/InputForm.tsx
-
 'use client';
 
 import {Controller, FieldValues, Path, useForm} from 'react-hook-form';
@@ -287,12 +285,7 @@ export function DynamicForm<TData extends FieldValues>({
         // --- 1. Xác định component để render với hệ thống ưu tiên rõ ràng ---
         let finalComponentTag: string;
 
-        // Ưu tiên 1 (cao nhất): `type: 'radio'` sẽ luôn render radio buttons.
-        if (inputType === 'radio') {
-            finalComponentTag = 'radio';
-        }
-        // Ưu tiên 2: `component` được chỉ định trong metadata.
-        else if (uiConfig.component) {
+        if (uiConfig.component) {
             finalComponentTag = uiConfig.component;
         }
         // Ưu tiên 3: Suy luận từ kiểu Zod.
