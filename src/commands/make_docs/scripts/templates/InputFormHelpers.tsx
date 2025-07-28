@@ -1,5 +1,3 @@
-// /Users/lethanh/WebstormProjects/audits-web/components/InputFormHelpers.tsx
-
 // --- ĐỊNH NGHĨA TYPE MỚI ---
 import {z} from "zod";
 import {FieldValues} from "react-hook-form";

@@ -1,5 +1,3 @@
-// /Users/lethanh/WebstormProjects/audits-web/components/InputForm.tsx
-
 'use client';
 
 import {Controller, FieldValues, Path, useForm} from 'react-hook-form';
