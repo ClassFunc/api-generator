@@ -285,7 +285,12 @@ export function DynamicForm<TData extends FieldValues>({
         // --- 1. Xác định component để render với hệ thống ưu tiên rõ ràng ---
         let finalComponentTag: string;
 
-        if (uiConfig.component) {
+        // Ưu tiên 1 (cao nhất): `type: 'radio'` sẽ luôn render radio buttons.
+        if (inputType === 'radio') {
+            finalComponentTag = 'radio';
+        }
+        // Ưu tiên 2: `component` được chỉ định trong metadata.
+        else if (uiConfig.component) {
             finalComponentTag = uiConfig.component;
         }
         // Ưu tiên 3: Suy luận từ kiểu Zod.
@@ -304,9 +309,11 @@ export function DynamicForm<TData extends FieldValues>({
 
         // Cảnh báo nếu component được yêu cầu tường minh nhưng không tìm thấy
         if (uiConfig.component && !ComponentToRender && componentRegistry) {
-            console.warn(
-                `[DynamicForm] Component "${uiConfig.component}" cho trường "${key}" không được tìm thấy trong componentRegistry. Sẽ fallback về logic thẻ HTML gốc.`
-            );
+            if (finalComponentTag !== 'radio') {
+                console.warn(
+                    `[DynamicForm] Component "${finalComponentTag}" for field "${key}" can not find in componentRegistry. Fallback to native html component.`
+                );
+            }
         }
 
         // --- 2. Chuẩn bị props chung ---
@@ -318,8 +325,8 @@ export function DynamicForm<TData extends FieldValues>({
             })) : []);
 
         const placeholderText = isLoading
-            ? 'Đang tải...'
-            : uiConfig.placeholder ?? (finalComponentTag === 'select' ? 'Lựa chọn...' : undefined);
+            ? 'Loading...'
+            : uiConfig.placeholder ?? (finalComponentTag === 'select' ? 'Select...' : undefined);
 
         const commonProps = {
             id: key,
