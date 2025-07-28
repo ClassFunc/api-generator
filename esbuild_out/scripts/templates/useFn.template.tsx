@@ -24,6 +24,7 @@ import {DynamicForm, DynamicFormProps} from "./InputForm";
 
 // @ts-ignore
 import {GreetingIN_defaultValues, GreetingINData_schema} from "../zodSchemas/Greeting_schema";
+import {nativeComponentRegistry} from "./nativeComponentRegistry";
 
 type INData = Unpacked<GreetingIN['data']>
 type OUT = GreetingOUT;
@@ -867,6 +868,7 @@ export const useGreetingPost = (
                 formSchema={GreetingINData_schema as any}
                 defaultValues={GreetingIN_defaultValues.data}
                 useSubmitHook={useGreetingPost as any}
+                componentRegistry={nativeComponentRegistry}
                 {...({...formProps, ...props})}
             />
         )

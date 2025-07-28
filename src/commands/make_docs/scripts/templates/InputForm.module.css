@@ -1,3 +1,5 @@
+/* /Users/lethanh/WebstormProjects/audits-web/components/InputForm.module.css */
+
 /* --- Cấu trúc Form chung --- */
 .formContainer {
     width: 100%;
@@ -174,3 +176,7 @@
     border: 1px solid #FCA5A5; /* Red-300 */
     margin-top: 0.25rem;
 }
+/*.submitButton {*/
+/*    background-color: green; !* Blue-600 *!*/
+/*    width: 10rem;*/
+/*}*/

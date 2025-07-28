@@ -1,3 +1,5 @@
+// /Users/lethanh/WebstormProjects/audits-web/components/InputFormHelpers.tsx
+
 // --- ĐỊNH NGHĨA TYPE MỚI ---
 import {z} from "zod";
 import {FieldValues} from "react-hook-form";
@@ -9,6 +11,30 @@ import {getAuth} from "firebase/auth";
 // --- ZOD SCHEMA DEFINITIONS ---
 // =================================================================
 
+//TYPES
+
+export const InputTypeSchema = z.enum([
+    "text",
+    "url",
+    "password",
+    "submit",
+    "checkbox",
+    "radio",
+    "button",
+    "file",
+    "date",
+    "email",
+    "number",
+    "range",
+    "color",
+    "hidden",
+    "datetime-local",
+    "date",
+    "datetime",
+    'switch'
+]);
+
+export type IInputTypeSchema = z.infer<typeof InputTypeSchema>;
 /**
  * Schema cho cấu hình fetch API cơ bản.
  * Đây là nền tảng cho cả fetchOnInit và effects.
@@ -84,9 +110,12 @@ export const UiMetadataSchema = z.object({
     // --- THAY ĐỔI Ở ĐÂY ---
     // Chuyển từ z.enum sang z.string() để cho phép bất kỳ component key nào.
     // Ví dụ: 'input', 'textarea', 'chip', 'shadcn-select', 'date-picker'
-    component: z.string().optional(),
+    component: z.union([
+        z.enum(['input', 'textarea', 'select']),
+        z.string().describe('for custom type from design system. ex: shadcn')
+    ]).default('input').optional(),
+    type: InputTypeSchema.optional(),
 
-    type: z.string().optional(), // Ví dụ: 'text', 'number', 'password'
     options: z.array(z.object({
         value: z.any(),
         label: z.string(),
@@ -139,11 +168,8 @@ export const getUiMetadata = (zodType: z.ZodTypeAny): IUiMetadataSchema | undefi
         return undefined;
     }
 };
-export const getHtmlInputType = (zodType: z.ZodTypeAny): string => {
+export const getHtmlInputType = (zodType: z.ZodTypeAny): IInputTypeSchema => {
     const coreType = getZodInnerType(zodType);
-    if (coreType instanceof z.ZodEnum) {
-        return 'select';
-    }
     if (coreType instanceof z.ZodNumber) {
         return 'number';
     }

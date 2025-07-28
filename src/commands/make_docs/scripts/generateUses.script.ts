@@ -48,6 +48,10 @@ fs.copyFileSync(
     path.resolve(templatesDir, `InputFormHelpers.tsx`),
     path.resolve(usesDir, `InputFormHelpers.tsx`),
 )
+fs.copyFileSync(
+    path.resolve(templatesDir, `nativeComponentRegistry.tsx`),
+    path.resolve(usesDir, `nativeComponentRegistry.tsx`),
+)
 // fs.mkdirSync(
 //     path.resolve(usesDir, `InfiniteScrollers`),
 //     {recursive: true},
