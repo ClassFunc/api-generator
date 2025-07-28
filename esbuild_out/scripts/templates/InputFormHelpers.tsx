@@ -24,7 +24,7 @@ export const FetchConfigSchema = z.object({
     /**
      * Phương thức HTTP. Mặc định là 'GET'.
      */
-    method: z.enum(['GET', 'POST', 'PUT', 'DELETE', 'PATCH']).optional().default('GET'),
+    method: z.enum(['GET', 'POST', 'PUT', 'DELETE', 'PATCH']).default('GET').optional(),
 
     /**
      * Headers cho request, hỗ trợ placeholder.
@@ -40,6 +40,18 @@ export const FetchConfigSchema = z.object({
      * Đường dẫn đến mảng options trong dữ liệu JSON trả về.
      */
     optionsPath: z.string().optional(),
+    // --- THÊM CÁC TRƯỜNG MỚI ---
+    /**
+     * Tên của trường trong object trả về sẽ được dùng làm `value` cho option.
+     * Ví dụ: 'id', '_id', 'code'
+     */
+    valueField: z.string().default('value').optional(),
+
+    /**
+     * Tên của trường trong object trả về sẽ được dùng làm `label` cho option.
+     * Ví dụ: 'name', 'title', 'description'
+     */
+    labelField: z.string().default('label').optional(),
 });
 
 // =================================================================
@@ -70,7 +82,12 @@ export const EffectSchema = FetchConfigSchema.extend({
 export const UiMetadataSchema = z.object({
     label: z.string().optional(),
     placeholder: z.string().optional(),
-    component: z.enum(['input', 'textarea', 'switch', 'radio', 'checkbox', 'select']).optional(),
+
+    // --- THAY ĐỔI Ở ĐÂY ---
+    // Chuyển từ z.enum sang z.string() để cho phép bất kỳ component key nào.
+    // Ví dụ: 'input', 'textarea', 'chip', 'shadcn-select', 'date-picker'
+    component: z.string().optional(),
+
     type: z.string().optional(), // Ví dụ: 'text', 'number', 'password'
     options: z.array(z.object({
         value: z.any(),
