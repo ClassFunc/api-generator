@@ -74,7 +74,7 @@ export function DynamicForm<TData extends FieldValues>({
     const styles: AllStyles = {
         submitButton: "bg-primary text-primary-foreground shadow-xs hover:bg-primary/90 inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium transition-all disabled:pointer-events-none disabled:opacity-50 h-9 px-4 py-2",
         successMessage: "mt-4 text-green-600",
-        nestedObject: "col-span-full mt-6 space-y-4 rounded-lg border bg-muted/20 p-4 dark:bg-muted/10",
+        nestedObject: "space-y-4 rounded-lg border bg-muted/20 p-4 dark:bg-muted/10",
         helperText: "whitespace-pre-wrap text-muted-foreground",
         ...defaultFormStyles,
         ...customStyles,
