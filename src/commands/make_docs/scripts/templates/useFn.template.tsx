@@ -20,11 +20,11 @@ import {
 import {InfinityScrollHereComponent, InfinityScrollHereProps} from "./InfinityScrollHereComponent";
 import useInfiniteScroll from "react-infinite-scroll-hook";
 import {InfinityLoading} from "./InfinityLoading";
-import {DynamicForm, DynamicFormProps} from "./InputForm";
+import {DynamicForm, DynamicFormProps} from "./InputForm/InputForm"
 
 // @ts-ignore
 import {GreetingIN_defaultValues, GreetingINData_schema} from "../zodSchemas/Greeting_schema";
-import {nativeComponentRegistry} from "./nativeComponentRegistry";
+import {nativeComponentRegistry} from "./InputForm/nativeComponentRegistry";
 
 type INData = Unpacked<GreetingIN['data']>
 type OUT = GreetingOUT;

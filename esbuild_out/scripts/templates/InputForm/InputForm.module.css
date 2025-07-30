@@ -167,6 +167,7 @@
     color: #6B7280; /* Gray-500 */
     margin-top: -0.1rem;
     margin-left: 5px;
+    white-space: pre-wrap;
 }
 
 .errorMessage {

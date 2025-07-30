@@ -1,4 +1,3 @@
-// /Users/lethanh/WebstormProjects/audits-web/components/InputFormHelpers.tsx
 
 // --- ĐỊNH NGHĨA TYPE MỚI ---
 import {z} from "zod";
@@ -141,6 +140,7 @@ export const UiMetadataSchema = z.object({
      * Hữu ích cho các field như filter text, switch,...
      */
     saveOnChange: z.boolean().optional(),
+    __passthrough: z.boolean().default(false).optional(),
 });
 
 
@@ -152,6 +152,7 @@ export const getZodInnerType = (zodType: z.ZodTypeAny): z.ZodTypeAny => {
     }
     return zodType;
 };
+
 export const getUiMetadata = (zodType: z.ZodTypeAny): IUiMetadataSchema | undefined => {
     const coreType = getZodInnerType(zodType);
     const description = coreType.description;
@@ -168,6 +169,45 @@ export const getUiMetadata = (zodType: z.ZodTypeAny): IUiMetadataSchema | undefi
         return undefined;
     }
 };
+
+/**
+ * Duyệt đệ quy qua một Zod schema và áp dụng `.passthrough()` cho các ZodObject
+ * có cờ `__passthrough: true` trong metadata.
+ * Điều này đảm bảo Zod không loại bỏ các trường động (`__additionalFields`) trong quá trình validation.
+ * @param schema - Zod schema đầu vào.
+ * @returns Một Zod schema mới đã được xử lý.
+ */
+export const makeSchemaPassthroughCompatible = (schema: z.ZodTypeAny): z.ZodTypeAny => {
+    // 1. Xử lý các wrapper trước để bảo toàn chúng (optional, nullable, default, array)
+    if (schema instanceof z.ZodOptional) {
+        return makeSchemaPassthroughCompatible(schema.unwrap()).optional();
+    }
+    if (schema instanceof z.ZodNullable) {
+        return makeSchemaPassthroughCompatible(schema.unwrap()).nullable();
+    }
+    if (schema instanceof z.ZodDefault) {
+        return makeSchemaPassthroughCompatible(schema._def.innerType).default(schema._def.defaultValue);
+    }
+    if (schema instanceof z.ZodArray) {
+        return z.array(makeSchemaPassthroughCompatible(schema.element));
+    }
+
+    // 2. Xử lý trường hợp cốt lõi: ZodObject
+    if (schema instanceof z.ZodObject) {
+        const uiConfig = getUiMetadata(schema);
+        const newShape = Object.fromEntries(Object.entries(schema.shape).map(([key, value]) => [key, makeSchemaPassthroughCompatible(value as z.ZodTypeAny)]));
+        let newSchema = z.object(newShape);
+        if (uiConfig?.__passthrough) {
+            // @ts-ignore
+            newSchema = newSchema.passthrough();
+        }
+        return newSchema;
+    }
+
+    // 3. Với các kiểu dữ liệu nguyên thủy khác, trả về chính nó
+    return schema;
+};
+
 export const getHtmlInputType = (zodType: z.ZodTypeAny): IInputTypeSchema => {
     const coreType = getZodInnerType(zodType);
     if (coreType instanceof z.ZodNumber) {
