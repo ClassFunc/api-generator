@@ -1,4 +1,3 @@
-
 // --- ĐỊNH NGHĨA TYPE MỚI ---
 import {z} from "zod";
 import {FieldValues} from "react-hook-form";
@@ -140,7 +139,6 @@ export const UiMetadataSchema = z.object({
      * Hữu ích cho các field như filter text, switch,...
      */
     saveOnChange: z.boolean().optional(),
-    __passthrough: z.boolean().default(false).optional(),
 });
 
 
@@ -172,7 +170,6 @@ export const getUiMetadata = (zodType: z.ZodTypeAny): IUiMetadataSchema | undefi
 
 /**
  * Duyệt đệ quy qua một Zod schema và áp dụng `.passthrough()` cho các ZodObject
- * có cờ `__passthrough: true` trong metadata.
  * Điều này đảm bảo Zod không loại bỏ các trường động (`__additionalFields`) trong quá trình validation.
  * @param schema - Zod schema đầu vào.
  * @returns Một Zod schema mới đã được xử lý.
@@ -197,7 +194,10 @@ export const makeSchemaPassthroughCompatible = (schema: z.ZodTypeAny): z.ZodType
         const uiConfig = getUiMetadata(schema);
         const newShape = Object.fromEntries(Object.entries(schema.shape).map(([key, value]) => [key, makeSchemaPassthroughCompatible(value as z.ZodTypeAny)]));
         let newSchema = z.object(newShape);
-        if (uiConfig?.__passthrough) {
+        // SỬA LỖI: Kiểm tra và bảo toàn thuộc tính .catchall() hoặc .passthrough() từ schema gốc.
+        const originalCatchall = schema._def.catchall;
+        if (originalCatchall._def.typeName !== z.ZodFirstPartyTypeKind.ZodNever) {
+            // Áp dụng lại .passthrough() cho schema mới để Zod không loại bỏ các trường không xác định.
             // @ts-ignore
             newSchema = newSchema.passthrough();
         }
