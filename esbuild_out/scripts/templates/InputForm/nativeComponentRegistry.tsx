@@ -1,4 +1,3 @@
-// /Users/lethanh/WebstormProjects/audits-web/components/InputForm/nativeComponentRegistry.tsx
 
 import React from 'react';
 // @ts-ignore

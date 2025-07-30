@@ -1,7 +1,7 @@
 'use client';
 
-import React from 'react';
 import {useFieldArray, useFormContext} from 'react-hook-form';
+import React from 'react';
 
 interface PassthroughFieldsProps {
     namePrefix: string;
@@ -28,8 +28,7 @@ export function PassthroughFields({namePrefix}: PassthroughFieldsProps) {
                 <label className="text-sm font-medium text-gray-900">Additional Parameters</label>
             )}
             {fields.map((field, index) => (
-                <div key={field.id}
-                     className="flex flex-row items-center gap-2 p-2 border rounded-md border-gray-300 shadow-sm">
+                <div key={field.id} className="flex flex-row items-center gap-2 p-2 border rounded-md border-gray-300 shadow-sm">
                     <input
                         id={`${name}.${index}.key`}
                         placeholder="Key"

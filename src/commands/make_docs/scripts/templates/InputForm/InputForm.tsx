@@ -72,7 +72,7 @@ export function DynamicForm<TData extends FieldValues>({
     const debounceTimers = useRef<Record<string, NodeJS.Timeout>>({});
 
     const styles: AllStyles = {
-        submitButton: "bg-primary text-primary-foreground shadow-xs hover:bg-primary/90 inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium transition-all disabled:pointer-events-none disabled:opacity-50 h-9 px-4 py-2",
+        submitButton: "bg-primary text-primary-foreground shadow-xs hover:bg-primary/90 inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium transition-all disabled:pointer-events-none disabled:opacity-50 h-9 px-4 py-2 m-auto",
         successMessage: "mt-4 text-green-600",
         nestedObject: "space-y-4 rounded-lg border bg-muted/20 p-4 dark:bg-muted/10",
         helperText: "whitespace-pre-wrap text-muted-foreground",
@@ -461,7 +461,10 @@ export function DynamicForm<TData extends FieldValues>({
                     return renderSchema(subSchema as z.ZodTypeAny, newPrefix);
                 });
 
-            const isPassthrough = !!uiConfig.__passthrough;
+            // CÁCH KIỂM TRA ĐÚNG: So sánh bằng typeName để đảm bảo độ chính xác.
+            // Một object không có .catchall() hoặc .passthrough() sẽ có catchall là ZodNever.
+            const isPassthrough = unwrappedSchema._def.catchall._def.typeName !== z.ZodFirstPartyTypeKind.ZodNever;
+
             if (isPassthrough) {
                 objectFields.push(<PassthroughFields key={`${pathPrefix}-passthrough`} namePrefix={pathPrefix}/>);
             }
