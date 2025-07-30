@@ -32,7 +32,7 @@ type SubmitHook<TData extends FieldValues> = (options?: { fireImmediately?: bool
     data: any;
 };
 
-type AllStyleKeys = keyof typeof defaultFormStyles | 'submitButton' | 'successMessage';
+type AllStyleKeys = keyof typeof defaultFormStyles | 'submitButton' | 'successMessage' | 'nestedObject' | 'helperText';
 type AllStyles = { [K in AllStyleKeys]: string };
 type CustomStyles = Partial<AllStyles>;
 
@@ -72,6 +72,8 @@ export function DynamicForm<TData extends FieldValues>({
     const styles: AllStyles = {
         submitButton: "bg-blue-600 text-white font-semibold py-2 px-4 rounded-lg shadow-md transition-colors duration-300 ease-in-out hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-opacity-50 disabled:bg-gray-400 disabled:cursor-not-allowed",
         successMessage: "mt-4 text-green-600",
+        nestedObject: "rounded-lg border bg-muted/20 p-4 dark:bg-muted/10 max-w-full",
+        helperText: "whitespace-pre-wrap text-muted-foreground",
         ...defaultFormStyles,
         ...customStyles,
     } as AllStyles;
@@ -90,11 +92,22 @@ export function DynamicForm<TData extends FieldValues>({
         defaultValues: defaultValues as any,
     });
 
+    const getVisibleFieldsRecursively = (schema: z.ZodTypeAny): z.ZodTypeAny[] => {
+        const unwrapped = getZodInnerType(schema);
+
+        if (unwrapped instanceof z.ZodObject) {
+            return Object.values(unwrapped.shape).flatMap(subSchema => getVisibleFieldsRecursively(subSchema as any));
+        }
+
+        const ui = getUiMetadata(schema);
+        if (ui?.type === 'hidden') {
+            return [];
+        }
+        return [schema];
+    }
+
     const shouldShowSubmitButton = useMemo(() => {
-        const visibleFields = Object.values(formSchema.shape).filter(schema => {
-            const ui = getUiMetadata(schema as any);
-            return ui?.type !== 'hidden';
-        });
+        const visibleFields = getVisibleFieldsRecursively(formSchema);
 
         if (visibleFields.length === 0) {
             return false;
@@ -106,7 +119,8 @@ export function DynamicForm<TData extends FieldValues>({
         });
 
         return !allAreSaveOnChange;
-    }, [formSchema.shape]);
+    }, [formSchema]);
+
 
     const fetchFieldOptions = useCallback(async (targetFieldName: string, fetchConfig: FetchConfig) => {
         setFieldLoading(prev => ({...prev, [targetFieldName]: true}));
@@ -165,27 +179,6 @@ export function DynamicForm<TData extends FieldValues>({
         }
     }, [getValues, setDynamicOptions, setFieldLoading]);
 
-    const runEffectsFor = useCallback((changedFieldName: string, allFormValues: TData) => {
-        Object.entries(formSchema.shape).forEach(([targetFieldName, targetFieldSchema]) => {
-            const ui = getUiMetadata(targetFieldSchema as any);
-            if (!ui?.effects) return;
-
-            ui.effects.forEach(effect => {
-                if (effect.listensTo === changedFieldName) {
-                    const listenedValue = get(allFormValues, changedFieldName);
-                    setValue(targetFieldName as Path<TData>, '' as any, {shouldValidate: true});
-                    setDynamicOptions(prev => ({...prev, [targetFieldName]: []}));
-
-                    if (listenedValue && effect.action === 'fetchOptions') {
-                        fetchFieldOptions(targetFieldName, effect);
-                    } else {
-                        setFieldLoading(prev => ({...prev, [targetFieldName]: false}));
-                    }
-                }
-            });
-        });
-    }, [formSchema, setValue, setDynamicOptions, setFieldLoading, fetchFieldOptions]);
-
     const handleAutoSave = useCallback(async () => {
         const isValid = await trigger();
         if (!isValid) {
@@ -207,13 +200,69 @@ export function DynamicForm<TData extends FieldValues>({
 
     }, [trigger, getValues, setIsSaving, fire, onSuccess]);
 
+    // --- LOGIC ĐỆ QUY MỚI ĐỂ XỬ LÝ HIỆU ỨNG ---
+    const runEffectsRecursively = useCallback((
+        schema: z.ZodTypeAny,
+        pathPrefix: string,
+        changedFieldName: string,
+        allFormValues: TData
+    ) => {
+        const unwrappedSchema = getZodInnerType(schema);
+
+        if (unwrappedSchema instanceof z.ZodObject) {
+            // Bước đệ quy: đi sâu vào object
+            Object.entries(unwrappedSchema.shape).forEach(([key, subSchema]) => {
+                const newPrefix = pathPrefix ? `${pathPrefix}.${key}` : key;
+                runEffectsRecursively(subSchema as z.ZodTypeAny, newPrefix, changedFieldName, allFormValues);
+            });
+        } else {
+            // Trường hợp cơ sở: chúng ta đang ở một field
+            const targetFieldName = pathPrefix;
+            const ui = getUiMetadata(schema);
+            if (!ui?.effects) return;
+
+            ui.effects.forEach(effect => {
+                if (effect.listensTo === changedFieldName) {
+                    const listenedValue = get(allFormValues, changedFieldName);
+                    setValue(targetFieldName as Path<TData>, '' as any, {shouldValidate: true});
+                    setDynamicOptions(prev => ({...prev, [targetFieldName]: []}));
+
+                    if (listenedValue && effect.action === 'fetchOptions') {
+                        fetchFieldOptions(targetFieldName, effect);
+                    } else {
+                        setFieldLoading(prev => ({...prev, [targetFieldName]: false}));
+                    }
+                }
+            });
+        }
+    }, [setValue, setDynamicOptions, setFieldLoading, fetchFieldOptions]);
+
+    // --- HÀM TIỆN ÍCH MỚI ĐỂ LẤY SCHEMA THEO PATH ---
+    const getFieldSchemaByPath = useCallback((path: string): z.ZodTypeAny | undefined => {
+        const pathParts = path.split('.');
+        let currentSchema: any = formSchema;
+        for (const part of pathParts) {
+            const unwrapped = getZodInnerType(currentSchema);
+            if (unwrapped instanceof z.ZodObject && unwrapped.shape[part]) {
+                currentSchema = unwrapped.shape[part];
+            } else {
+                // Nếu không tìm thấy, trả về undefined
+                return undefined;
+            }
+        }
+        return currentSchema;
+    }, [formSchema]);
+
+
     useEffect(() => {
         const subscription = watch((value, {name, type}) => {
             if (!name || type !== 'change') return;
 
-            runEffectsFor(name, getValues());
+            // Sử dụng hàm đệ quy mới để xử lý hiệu ứng trên toàn bộ form
+            runEffectsRecursively(formSchema, '', name, getValues());
 
-            const fieldSchema = formSchema.shape[name];
+            // Sử dụng hàm tiện ích mới để lấy schema và xử lý saveOnChange
+            const fieldSchema = getFieldSchemaByPath(name);
             if (!fieldSchema) return;
 
             const ui = getUiMetadata(fieldSchema);
@@ -229,24 +278,32 @@ export function DynamicForm<TData extends FieldValues>({
             subscription.unsubscribe();
             Object.values(debounceTimers.current).forEach(clearTimeout);
         };
-    }, [watch, getValues, runEffectsFor, formSchema.shape, handleAutoSave]);
+    }, [watch, getValues, formSchema, handleAutoSave, runEffectsRecursively, getFieldSchemaByPath]);
 
 
     useEffect(() => {
         if (!initialEffectsRan.current) {
-            const initialFormValues = getValues();
-            Object.entries(formSchema.shape).forEach(([fieldName, fieldSchema]) => {
-                const ui = getUiMetadata(fieldSchema as any);
-                if (ui?.fetchOnInit) fetchFieldOptions(fieldName, ui.fetchOnInit);
-            });
-            if (defaultValues) {
-                Object.keys(defaultValues).forEach(fieldName => {
-                    if (getValues(fieldName as Path<TData>)) runEffectsFor(fieldName, getValues());
-                });
-            }
+            // This initial effect runner also needs to be recursive
+            const runInitialEffects = (schema: z.ZodTypeAny, pathPrefix: string = '') => {
+                const unwrappedSchema = getZodInnerType(schema);
+                if (unwrappedSchema instanceof z.ZodObject) {
+                    Object.entries(unwrappedSchema.shape).forEach(([key, subSchema]) => {
+                        const newPrefix = pathPrefix ? `${pathPrefix}.${key}` : key;
+                        runInitialEffects(subSchema as z.ZodTypeAny, newPrefix);
+                    });
+                } else {
+                    const ui = getUiMetadata(schema);
+                    if (ui?.fetchOnInit) fetchFieldOptions(pathPrefix, ui.fetchOnInit);
+                    if (defaultValues && get(defaultValues, pathPrefix)) {
+                        // Kích hoạt hiệu ứng cho các trường có giá trị mặc định
+                        runEffectsRecursively(formSchema, '', pathPrefix, getValues());
+                    }
+                }
+            };
+            runInitialEffects(formSchema);
             initialEffectsRan.current = true;
         }
-    }, [runEffectsFor, defaultValues, getValues, formSchema.shape, fetchFieldOptions]);
+    }, [defaultValues, getValues, formSchema, fetchFieldOptions, runEffectsRecursively]);
 
     useEffect(() => {
         return () => {
@@ -268,8 +325,6 @@ export function DynamicForm<TData extends FieldValues>({
 
     const shouldShowStatusMessage = isSubmitted && !isBusy;
 
-
-
     const renderField = (key: string, schema: z.ZodTypeAny): JSX.Element | null => {
         const formKey = key as Path<TData>;
         const uiConfig = getUiMetadata(schema) || {};
@@ -282,27 +337,22 @@ export function DynamicForm<TData extends FieldValues>({
         const inputType = InputTypeSchema.safeParse(uiConfig.type).data || getHtmlInputType(schema);
         const isLoading = fieldLoading[key];
 
-        // --- 1. Xác định component để render với hệ thống ưu tiên rõ ràng ---
         let finalComponentTag: string;
 
-        if (uiConfig.component) {
+        if (inputType === 'radio') {
+            finalComponentTag = 'radio';
+        } else if (uiConfig.component) {
             finalComponentTag = uiConfig.component;
-        }
-        // Ưu tiên 3: Suy luận từ kiểu Zod.
-        else if (coreComponentZod instanceof z.ZodEnum) {
+        } else if (coreComponentZod instanceof z.ZodEnum) {
             finalComponentTag = 'select';
         } else if (coreComponentZod instanceof z.ZodBoolean || coreComponentZod instanceof z.ZodArray) {
             finalComponentTag = 'checkbox';
-        }
-        // Ưu tiên 4 (mặc định): Fallback về input.
-        else {
+        } else {
             finalComponentTag = 'input';
         }
 
-        // Sau khi có `finalComponentTag`, tìm component tương ứng trong registry.
         const ComponentToRender = componentRegistry ? componentRegistry[finalComponentTag] : undefined;
 
-        // Cảnh báo nếu component được yêu cầu tường minh nhưng không tìm thấy
         if (uiConfig.component && !ComponentToRender && componentRegistry) {
             if (finalComponentTag !== 'radio') {
                 console.warn(
@@ -311,7 +361,6 @@ export function DynamicForm<TData extends FieldValues>({
             }
         }
 
-        // --- 2. Chuẩn bị props chung ---
         const finalOptions: any[] = dynamicOptions[key]
             ?? uiConfig.options
             ?? (coreComponentZod instanceof z.ZodEnum ? coreComponentZod.options.map((val: any) => ({
@@ -330,17 +379,18 @@ export function DynamicForm<TData extends FieldValues>({
             ...uiConfig.inputProps,
         };
 
-        // Suy luận các loại group từ `finalComponentTag` đã được chuẩn hóa
         const isRadioGroup = finalComponentTag === 'radio';
         const isCheckboxGroup = (coreComponentZod instanceof z.ZodArray && finalComponentTag === 'checkbox');
         const isSingleCheckboxOrSwitch = !isCheckboxGroup && (finalComponentTag === 'checkbox' || finalComponentTag === 'switch');
         const showTopLabel = !isSingleCheckboxOrSwitch;
 
+        const fieldName = key.split('.').pop() || key;
+
         return (
             <div key={key} className={styles.formGroup}>
                 {showTopLabel && (
                     <label htmlFor={key} className={styles.label}>
-                        {uiConfig.label || startCase(key)}
+                        {uiConfig.label || startCase(fieldName)}
                         {uiConfig.seeMoreLink && (
                             <a href={uiConfig.seeMoreLink} target="_blank" rel="noopener noreferrer"
                                className="ml-2 text-blue-500 hover:underline text-xs">[?]</a>
@@ -348,27 +398,19 @@ export function DynamicForm<TData extends FieldValues>({
                     </label>
                 )}
 
-                {/* --- 3. Render component (LOGIC HỢP NHẤT) --- */}
-                {/* Sử dụng Controller cho các component phức tạp (checkbox, radio, switch, custom) */}
                 {(isRadioGroup || isCheckboxGroup || isSingleCheckboxOrSwitch || ComponentToRender) ? (
                     <Controller
                         name={formKey}
                         control={control}
                         render={({field}) => {
-                            // ResolvedComponent sẽ là component từ registry (ví dụ: ShadcnRadioGroup) hoặc NativeFormControl
                             const ResolvedComponent = ComponentToRender
                                 || (componentRegistry && componentRegistry[finalComponentTag])
                                 || NativeFormControl;
 
                             if (isRadioGroup) {
-                                // Logic này lặp và render TỪNG radio item, truyền props cho item đó.
-                                // Nó tương thích hoàn hảo với cả ShadcnRadioGroup và NativeFormControl.
                                 if (ComponentToRender && ComponentToRender !== NativeFormControl) {
-                                    // Đây là một component group tùy chỉnh (ví dụ: ShadcnRadioGroup).
-                                    // Chúng ta render nó một lần và truyền tất cả options.
                                     return <ResolvedComponent {...commonProps} {...field} options={finalOptions} />;
                                 } else {
-                                    // Đây là trường hợp fallback về native. Render từng item.
                                     return (
                                         <div className={styles.radioGroup ?? "flex items-center space-x-4 pt-1"}>
                                             {finalOptions.map((option) => (
@@ -413,7 +455,6 @@ export function DynamicForm<TData extends FieldValues>({
                                                     }}
                                                     label={option.label}
                                                     disabled={commonProps.disabled}
-                                                    // Ghi đè props cho NativeFormControl
                                                     tag="input"
                                                     type="checkbox"
                                                 />
@@ -428,17 +469,15 @@ export function DynamicForm<TData extends FieldValues>({
                                     <ResolvedComponent
                                         {...commonProps}
                                         {...field}
-                                        label={uiConfig.label || startCase(key)}
+                                        label={uiConfig.label || startCase(fieldName)}
                                         checked={!!field.value}
                                         onChange={field.onChange}
-                                        // Ghi đè props cho NativeFormControl
                                         tag="input"
                                         type={finalComponentTag === 'switch' ? 'switch' : 'checkbox'}
                                     />
                                 );
                             }
 
-                            // Các component tùy chỉnh khác (ví dụ: select, input, textarea...)
                             return <ResolvedComponent {...commonProps}
                                                       {...field}
                                                       options={finalOptions}
@@ -447,7 +486,6 @@ export function DynamicForm<TData extends FieldValues>({
                         }}
                     />
                 ) : (
-                    // Fallback về các element HTML gốc không cần Controller (input, textarea)
                     <NativeFormControl
                         {...commonProps}
                         {...register(formKey, {
@@ -459,21 +497,90 @@ export function DynamicForm<TData extends FieldValues>({
                     />
                 )}
 
-                {uiConfig.helperText && <p className={styles.helperText}>{uiConfig.helperText}</p>}
-                {formValidationErrors[formKey] && (
-                    <span className={styles.errorMessage}>{formValidationErrors[formKey]?.message as string}</span>
+                {uiConfig.helperText && (
+                    <p className={`${styles.helperText}`}>
+                        {uiConfig.helperText}
+                    </p>
+                )}
+                {get(formValidationErrors, formKey) && (
+                    <span
+                        className={styles.errorMessage}>{(get(formValidationErrors, formKey) as any)?.message as string}</span>
                 )}
             </div>
         );
     };
 
+    const renderSchema = (schema: z.ZodTypeAny, pathPrefix: string = ''): (JSX.Element | null)[] => {
+        const unwrappedSchema = getZodInnerType(schema);
+        if (unwrappedSchema instanceof z.ZodObject) {
+            const uiConfig = getUiMetadata(schema) || {};
+            const objectFields = Object.entries(unwrappedSchema.shape)
+                .flatMap(([key, subSchema]) => {
+                    const newPrefix = pathPrefix ? `${pathPrefix}.${key}` : key;
+                    return renderSchema(subSchema as z.ZodTypeAny, newPrefix);
+                });
+
+            if (pathPrefix) {
+                const fieldName = pathPrefix.split('.').pop() || pathPrefix;
+                return [
+                    <fieldset key={pathPrefix} className={styles.nestedObject}>
+                        <legend className={`${styles.label} text-base font-semibold text-foreground`}>
+                            {uiConfig.label || startCase(fieldName)}
+                            {uiConfig.seeMoreLink && (
+                                <a href={uiConfig.seeMoreLink} target="_blank" rel="noopener noreferrer"
+                                   className="ml-2 text-blue-500 hover:underline text-xs">[?]</a>
+                            )}
+                        </legend>
+                        {objectFields}
+                        {uiConfig.helperText && (
+                            <p className={`${styles.helperText}`}>
+                                {uiConfig.helperText}
+                            </p>
+                        )}
+                    </fieldset>
+                ];
+            }
+
+            const rootElements = [...objectFields];
+            // Root object: Create a header with title, description, and a separator
+            const hasHeaderContent = uiConfig.label || uiConfig.helperText;
+
+            if (hasHeaderContent) {
+                const headerBlock = (
+                    <div key="form-header" className="col-span-full">
+                        {uiConfig.label && (
+                            <h2 className="text-2xl font-semibold tracking-tight text-foreground">
+                                {uiConfig.label}
+                            </h2>
+                        )}
+                        {uiConfig.helperText && (
+                            <p className={`${styles.helperText}`}>
+                                {uiConfig.helperText}
+                            </p>
+                        )}
+                        {/*<hr className="my-1 border-border"/>*/}
+                    </div>
+                );
+                rootElements.unshift(headerBlock);
+            }
+            return rootElements;
+        }
+
+        if (pathPrefix) {
+            return [renderField(pathPrefix, schema)];
+        }
+
+        return [];
+    };
+
+
     return (
         <div className={styles.formContainer}>
             <form onSubmit={handleSubmit(handleFormSubmit)} className={styles.form}>
-                {Object.entries(formSchema.shape).map(([key, schema]) => renderField(key, schema as any))}
+                {renderSchema(formSchema)}
 
                 {shouldShowSubmitButton && (
-                    <div className="flex items-center gap-4 mt-6">
+                    <div className="flex items-center col-span-full justify-center">
                         <button type="submit" disabled={isBusy} className={styles.submitButton}>
                             {isSaving ? 'Saving...' : (isBusy ? loadingButtonText : submitButtonText)}
                         </button>

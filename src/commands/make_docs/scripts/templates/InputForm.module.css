@@ -28,6 +28,8 @@
     display: flex;
     flex-direction: column;
     gap: 0.5rem; /* Khoảng cách giữa label và input */
+    margin-top: 1rem;
+    margin-bottom: 1rem;
 }
 
 .label {
@@ -164,7 +166,8 @@
 .helperText {
     font-size: 0.875rem;
     color: #6B7280; /* Gray-500 */
-    margin-top: -0.25rem; /* Đặt gần input hơn một chút */
+    margin-top: -0.1rem;
+    margin-left: 5px;
 }
 
 .errorMessage {
@@ -177,6 +180,5 @@
     margin-top: 0.25rem;
 }
 /*.submitButton {*/
-/*    background-color: green; !* Blue-600 *!*/
 /*    width: 10rem;*/
 /*}*/
