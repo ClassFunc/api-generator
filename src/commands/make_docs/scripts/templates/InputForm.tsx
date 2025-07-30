@@ -92,6 +92,7 @@ export function DynamicForm<TData extends FieldValues>({
         defaultValues: defaultValues as any,
     });
 
+    // << BẮT ĐẦU CẬP NHẬT LOGIC NÚT SUBMIT >>
     const getVisibleFieldsRecursively = (schema: z.ZodTypeAny): z.ZodTypeAny[] => {
         const unwrapped = getZodInnerType(schema);
 
@@ -120,6 +121,7 @@ export function DynamicForm<TData extends FieldValues>({
 
         return !allAreSaveOnChange;
     }, [formSchema]);
+    // << KẾT THÚC CẬP NHẬT LOGIC NÚT SUBMIT >>
 
 
     const fetchFieldOptions = useCallback(async (targetFieldName: string, fetchConfig: FetchConfig) => {
@@ -543,14 +545,18 @@ export function DynamicForm<TData extends FieldValues>({
 
             const rootElements = [...objectFields];
             // Root object: Create a header with title, description, and a separator
-            const hasHeaderContent = uiConfig.label || uiConfig.helperText;
+            const hasHeaderContent = uiConfig.label || uiConfig.helperText || uiConfig.seeMoreLink;
 
             if (hasHeaderContent) {
                 const headerBlock = (
                     <div key="form-header" className="col-span-full">
                         {uiConfig.label && (
-                            <h2 className="text-2xl font-semibold tracking-tight text-foreground">
+                            <h2 className="text-2xl font-semibold tracking-tight text-foreground flex flex-row gap-2 items-center">
                                 {uiConfig.label}
+                                {uiConfig.seeMoreLink && (
+                                    <a href={uiConfig.seeMoreLink} target="_blank" rel="noopener noreferrer"
+                                       className="text-blue-500 hover:underline text-sm">[?]</a>
+                                )}
                             </h2>
                         )}
                         {uiConfig.helperText && (
