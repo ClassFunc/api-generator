@@ -25,27 +25,44 @@ import {DynamicForm, DynamicFormProps} from "./InputForm/InputForm"
 // @ts-ignore
 import {GreetingIN_defaultValues, GreetingINData_schema} from "../zodSchemas/Greeting_schema";
 import {nativeComponentRegistry} from "./InputForm/nativeComponentRegistry";
+/*
+INData = IN['data'] = Map<string,any> | any
+* */
+type INData = GreetingIN['data']
 
-type INData = Unpacked<GreetingIN['data']>
+/*
+OUT = {result: Result}
+* */
 type OUT = GreetingOUT;
-type OUTResult = Unpacked<GreetingOUT['result']>
+
+/*
+Result = OUT['result'] = {count, length, data: any|Item[], pageToken,...}
+* */
+type OUTResult = GreetingOUT['result']
 type Result = OUTResult;
 
+/*
+Data = OUT['result']['data'|'docs'] = Array<Item> | any;
+* */
 export type OUTResultMaybeData = OUTResult extends { data: infer U }
     ? U :
     OUTResult extends { docs: infer U2 }
         ? U2
         : any;
 
-export type OUTResultMaybeDataItem = Unpacked<OUTResultMaybeData>
 type Data = OUTResultMaybeData;
-export type Item = OUTResultMaybeDataItem;
 
-function valueOfOUTResultMaybeData(result: unknown): OUTResultMaybeData | OUTResult | null {
+function valueOfData(result: unknown): OUTResultMaybeData | OUTResult | null {
     if (!result)
         return null;
-    return (isPlainObject(result) && get(result, "data")) ? get(result, 'data')! as OUTResultMaybeData : result as OUTResult
+    return get(result, "data") || get(result, "docs") || null
 }
+
+/*
+Item = Unpacked<Data> = any
+* */
+export type OUTResultMaybeDataItem = Unpacked<Data>
+export type Item = OUTResultMaybeDataItem;
 
 interface ResultDataInnerComponentProps {
     mainClassName?: string;
@@ -537,7 +554,7 @@ export const useGreetingPost = (
             if (!CustomDataComponent)
                 return null;
 
-            const data = valueOfOUTResultMaybeData(response?.result);
+            const data = valueOfData(response?.result);
 
             if (loading && !data)
                 return LoadingComponent ? <LoadingComponent/> : <div>loading...</div>;
@@ -555,7 +572,7 @@ export const useGreetingPost = (
             if (!CustomDataItemComponent)
                 return null;
 
-            const data = valueOfOUTResultMaybeData(response?.result);
+            const data = valueOfData(response?.result);
 
             if (loading && !data)
                 return LoadingComponent ? <LoadingComponent/> : <div>loading...</div>;
