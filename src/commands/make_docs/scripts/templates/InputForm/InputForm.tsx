@@ -311,6 +311,7 @@ export function DynamicForm<TData extends FieldValues>({
     }, [setDynamicOptions, setFieldLoading]);
 
     const handleFormSubmit = (formData: TData) => {
+        // @ts-ignore
         startTransition(async () => {
             try {
                 const processedData = processPassthroughFields(formData);
