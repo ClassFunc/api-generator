@@ -4,8 +4,7 @@ import {Controller, FieldValues, FormProvider, Path, useForm} from 'react-hook-f
 import {zodResolver} from '@hookform/resolvers/zod';
 import {z} from 'zod';
 import {get, isArray, startCase} from 'lodash';
-import React, {JSX, useCallback, useEffect, useMemo, useRef, useTransition} from 'react';
-
+import React, {JSX, useCallback, useEffect, useMemo, useRef, useState, useTransition} from 'react';
 import {
     FetchConfig,
     getAuthToken,
@@ -21,6 +20,7 @@ import defaultFormStyles from './InputForm.module.css';
 import {atom, useAtom} from "jotai";
 import {NativeFormControl} from "./nativeComponentRegistry";
 import {PassthroughFields} from "./PassthroughFields";
+import {DataDisplayTable, DataPathFieldConfig, RowAction, TableAction} from "./DataDisplayTable";
 
 export const dynamicOptionsAtom = atom<Record<string, any[]>>({});
 export const fieldLoadingAtom = atom<Record<string, boolean>>({});
@@ -34,20 +34,46 @@ type SubmitHook<TData extends FieldValues> = (options?: { fireImmediately?: bool
     data: any;
 };
 
-type AllStyleKeys = keyof typeof defaultFormStyles | 'submitButton' | 'successMessage' | 'nestedObject' | 'helperText';
+type AllStyleKeys =
+    keyof typeof defaultFormStyles
+    | 'submitButton'
+    | 'successMessage'
+    | 'nestedObject'
+    | 'helperText'
+    | 'successContainer'
+    | 'resetButton';
 type AllStyles = { [K in AllStyleKeys]: string };
 type CustomStyles = Partial<AllStyles>;
 
+// --- NÂNG CẤP PROPS ---
 export interface DynamicFormProps<TData extends FieldValues> {
+    //input settings
     formSchema: z.ZodObject<any, any, any>;
     useSubmitHook: SubmitHook<TData>;
     defaultValues?: TData;
-    onSuccess?: (data: any) => void;
+    dynamicINDataValues?: Record<string, any>;
+    customStyles?: CustomStyles;
     submitButtonText?: string;
     loadingButtonText?: string;
-    successMessage?: string;
-    customStyles?: CustomStyles;
+    // ouput settings
+    onSuccess?: (data: any) => void;
+    onError?: (error: any) => void;
+    successMessage?: React.ReactNode;
+    renderSuccessContent?: (result: {
+        apiResponse: any,
+        submittedValues: TData
+    }) => React.ReactNode;
+    successDataPath?: string;
     componentRegistry?: Record<string, React.ComponentType<any>>;
+    showResponseDetails?: boolean;
+    successDataPathFields?: DataPathFieldConfig[];
+    rowActions?: RowAction[];
+    onRowClick?: (rowData: any) => void;
+    rowKeyField?: string;
+    onSelectionChange?: (selectedKeys: Set<any>, selectedRows: any[]) => void;
+    tableActions?: TableAction[];
+    selectOnRowClick?: boolean;
+    selectedRowClassName?: string;
 }
 
 export function DynamicForm<TData extends FieldValues>({
@@ -55,16 +81,34 @@ export function DynamicForm<TData extends FieldValues>({
                                                            useSubmitHook,
                                                            defaultValues,
                                                            onSuccess,
+                                                           onError,
                                                            submitButtonText = 'Send',
                                                            loadingButtonText = 'Sending...',
-                                                           successMessage = '',
+                                                           successMessage = 'Your submission was successful!',
+                                                           successDataPath = 'result.data',
+                                                           renderSuccessContent,
                                                            customStyles = {},
                                                            componentRegistry,
+                                                           showResponseDetails = false,
+                                                           successDataPathFields,
+                                                           rowActions,
+                                                           onRowClick,
+                                                           rowKeyField,
+                                                           onSelectionChange,
+                                                           tableActions,
+                                                           selectOnRowClick,
+                                                           selectedRowClassName,
+                                                           dynamicINDataValues,
                                                        }: DynamicFormProps<TData>) {
-    const {fire, loading: hookLoading, error, data} = useSubmitHook({fireImmediately: false});
+    const {fire, loading: hookLoading, error} = useSubmitHook({fireImmediately: false});
     const [isPending, startTransition] = useTransition();
     const [isSaving, setIsSaving] = useAtom(formSavingAtom);
     const isBusy = isPending || hookLoading || isSaving;
+
+    const [successState, setSuccessState] = useState<{
+        apiResponse: any,
+        submittedValues: TData
+    } | null>(null);
 
     const [dynamicOptions, setDynamicOptions] = useAtom(dynamicOptionsAtom);
     const [fieldLoading, setFieldLoading] = useAtom(fieldLoadingAtom);
@@ -76,6 +120,8 @@ export function DynamicForm<TData extends FieldValues>({
         successMessage: "mt-4 text-green-600",
         nestedObject: "space-y-4 rounded-lg border bg-muted/20 p-4 dark:bg-muted/10",
         helperText: "whitespace-pre-wrap text-muted-foreground",
+        successContainer: "p-6 border rounded-lg bg-background shadow-sm text-center",
+        resetButton: "mt-6 bg-secondary text-secondary-foreground hover:bg-secondary/80 inline-flex items-center justify-center whitespace-nowrap rounded-md text-sm font-medium h-9 px-4 py-2",
         ...defaultFormStyles,
         ...customStyles,
     } as AllStyles;
@@ -87,9 +133,10 @@ export function DynamicForm<TData extends FieldValues>({
         defaultValues: defaultValues as any,
     });
     const {
-        register,
         handleSubmit,
         formState: {errors: formValidationErrors, isSubmitted},
+        reset,
+        register,
         watch,
         setValue,
         getValues,
@@ -203,13 +250,18 @@ export function DynamicForm<TData extends FieldValues>({
 
         const formData = getValues();
         const processedData = processPassthroughFields(formData);
-        console.log('[DynamicForm] Auto-saving data to API:', processedData); // DEBUG LOG
+        const finalData = { ...dynamicINDataValues, ...processedData };
         setIsSaving(true);
-        fire(processedData)
-            .then(result => onSuccess?.(result))
-            .catch(err => console.error("[AutoSave] Submission caught an error:", err))
+        fire(finalData)
+            .then(result => {
+                onSuccess?.(result);
+            })
+            .catch(err => {
+                console.error("[AutoSave] Submission caught an error:", err);
+                onError?.(err);
+            })
             .finally(() => setIsSaving(false));
-    }, [trigger, getValues, setIsSaving, fire, onSuccess]);
+    }, [trigger, getValues, setIsSaving, fire, onSuccess, dynamicINDataValues, onError]);
 
     const runEffectsRecursively = useCallback((
         schema: z.ZodTypeAny,
@@ -249,10 +301,8 @@ export function DynamicForm<TData extends FieldValues>({
         const subscription = watch((value, {name, type}) => {
             if (!name || type !== 'change') return;
 
-            // Luôn chạy effect cho mọi thay đổi
             runEffectsRecursively(formSchema, '', name, getValues());
 
-            // Tìm schema "cha" gần nhất của trường đã thay đổi, kể cả trường động.
             const pathParts = name.split('.');
             let deepestSchemaOwner: z.ZodTypeAny = formSchema;
             let currentSchema: any = formSchema;
@@ -261,14 +311,12 @@ export function DynamicForm<TData extends FieldValues>({
                 const unwrapped = getZodInnerType(currentSchema);
                 if (unwrapped instanceof z.ZodObject && unwrapped.shape[part]) {
                     currentSchema = unwrapped.shape[part];
-                    deepestSchemaOwner = currentSchema; // Cập nhật schema "cha" gần nhất
+                    deepestSchemaOwner = currentSchema;
                 } else {
-                    // Đường dẫn không còn khớp với schema, schema "cha" cuối cùng tìm thấy là đúng
                     break;
                 }
             }
 
-            // Kiểm tra xem schema "cha" này có cờ saveOnChange không
             const ui = getUiMetadata(deepestSchemaOwner);
             if (ui?.saveOnChange) {
                 if (debounceTimers.current[name]) clearTimeout(debounceTimers.current[name]);
@@ -311,20 +359,24 @@ export function DynamicForm<TData extends FieldValues>({
     }, [setDynamicOptions, setFieldLoading]);
 
     const handleFormSubmit = (formData: TData) => {
-        // @ts-ignore
         startTransition(async () => {
             try {
                 const processedData = processPassthroughFields(formData);
-                console.log('[DynamicForm] Submitting data to API:', processedData); // DEBUG LOG
-                const result = await fire(processedData);
+                const finalData = { ...dynamicINDataValues, ...processedData };
+                const result = await fire(finalData);
                 onSuccess?.(result);
+                setSuccessState({apiResponse: result, submittedValues: finalData});
+                // reset(defaultValues);
             } catch (e) {
                 console.error("Form submission caught an error:", e);
+                onError?.(e);
             }
         });
     };
 
-    const shouldShowStatusMessage = isSubmitted && !isBusy;
+    const handleResetForm = () => {
+        setSuccessState(null);
+    };
 
     const renderField = (key: string, schema: z.ZodTypeAny): JSX.Element | null => {
         const formKey = key as Path<TData>;
@@ -462,8 +514,6 @@ export function DynamicForm<TData extends FieldValues>({
                     return renderSchema(subSchema as z.ZodTypeAny, newPrefix);
                 });
 
-            // CÁCH KIỂM TRA ĐÚNG: So sánh bằng typeName để đảm bảo độ chính xác.
-            // Một object không có .catchall() hoặc .passthrough() sẽ có catchall là ZodNever.
             const isPassthrough = unwrappedSchema._def.catchall._def.typeName !== z.ZodFirstPartyTypeKind.ZodNever;
 
             if (isPassthrough) {
@@ -523,30 +573,62 @@ export function DynamicForm<TData extends FieldValues>({
     };
 
     return (
-        <div className={styles.formContainer}>
-            <FormProvider {...formMethods}>
-                <form onSubmit={handleSubmit(handleFormSubmit)} className={styles.form}>
-                    {renderSchema(formSchema)}
+        <>
+            <div className={styles.formContainer}>
+                <FormProvider {...formMethods}>
+                    <form onSubmit={handleSubmit(handleFormSubmit)} className={styles.form}>
+                        {renderSchema(formSchema)}
 
-                    {shouldShowSubmitButton && (
-                        <div className="mt-8 flex items-center col-span-full justify-start">
-                            <button type="submit" disabled={isBusy} className={styles.submitButton}>
-                                {isSaving ? 'Saving...' : (isBusy ? loadingButtonText : submitButtonText)}
-                            </button>
-                            {isSaving && (
-                                <span className="ml-4 text-sm text-gray-500 animate-pulse">Processing...</span>
-                            )}
-                        </div>
-                    )}
+                        {shouldShowSubmitButton && (
+                            <div className="mt-8 flex items-center col-span-full justify-start">
+                                <button type="submit" disabled={isBusy} className={styles.submitButton}>
+                                    {isSaving ? 'Saving...' : (isBusy ? loadingButtonText : submitButtonText)}
+                                </button>
+                                {isSaving && (
+                                    <span className="ml-4 text-sm text-gray-500 animate-pulse">Processing...</span>
+                                )}
+                            </div>
+                        )}
 
-                    {shouldShowStatusMessage && error && (
-                        <p className={`${styles.errorMessage} mt-4`}>{error.message}</p>
-                    )}
-                    {shouldShowStatusMessage && !error && data && successMessage && (
-                        <p className={styles.successMessage}>{successMessage}</p>
-                    )}
-                </form>
-            </FormProvider>
-        </div>
+                        {isSubmitted && !isBusy && !successState && error && (
+                            <p className={`${styles.errorMessage} mt-4`}>{error.message}</p>
+                        )}
+                    </form>
+                </FormProvider>
+            </div>
+            {
+                successState && !error && (
+                    <div className={`${styles.successContainer} mt-8`}>
+                        {renderSuccessContent ? (
+                            renderSuccessContent(successState)
+                        ) : successState.apiResponse ? (
+                            <div className="w-full text-left">
+                                <DataDisplayTable response={successState.apiResponse}
+                                                  dataPath={successDataPath}
+                                                  dataPathFields={successDataPathFields}
+                                                  showResponseDetails={showResponseDetails}
+                                                  rowActions={rowActions}
+                                                  onRowClick={onRowClick}
+                                                  rowKeyField={rowKeyField}
+                                                  onSelectionChange={onSelectionChange}
+                                                  tableActions={tableActions}
+                                                  selectOnRowClick={selectOnRowClick}
+                                                  selectedRowClassName={selectedRowClassName}
+                                                  componentRegistry={componentRegistry}/>
+                            </div>
+                        ) : (
+                            <>
+                                <div className="text-2xl text-green-500 mb-4">✅</div>
+                                <h3 className="text-xl font-semibold text-foreground">Success!</h3>
+                                <div className={styles.successMessage}>{successMessage}</div>
+                            </>
+                        )}
+                        <button onClick={handleResetForm} className={styles.resetButton}>
+                            Submit another response
+                        </button>
+                    </div>
+                )
+            }
+        </>
     );
 }

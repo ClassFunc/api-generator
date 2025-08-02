@@ -20,7 +20,7 @@ import defaultFormStyles from './InputForm.module.css';
 import {atom, useAtom} from "jotai";
 import {NativeFormControl} from "./nativeComponentRegistry";
 import {PassthroughFields} from "./PassthroughFields";
-import {DataDisplayTable, DataPathFieldConfig} from "./DataDisplayTable";
+import {DataDisplayTable, DataPathFieldConfig, RowAction, TableAction} from "./DataDisplayTable";
 
 export const dynamicOptionsAtom = atom<Record<string, any[]>>({});
 export const fieldLoadingAtom = atom<Record<string, boolean>>({});
@@ -47,22 +47,33 @@ type CustomStyles = Partial<AllStyles>;
 
 // --- NÂNG CẤP PROPS ---
 export interface DynamicFormProps<TData extends FieldValues> {
+    //input settings
     formSchema: z.ZodObject<any, any, any>;
     useSubmitHook: SubmitHook<TData>;
     defaultValues?: TData;
-    onSuccess?: (data: any) => void;
+    dynamicINDataValues?: Record<string, any>;
+    customStyles?: CustomStyles;
     submitButtonText?: string;
     loadingButtonText?: string;
+    // ouput settings
+    onSuccess?: (data: any) => void;
+    onError?: (error: any) => void;
     successMessage?: React.ReactNode;
     renderSuccessContent?: (result: {
         apiResponse: any,
         submittedValues: TData
     }) => React.ReactNode;
     successDataPath?: string;
-    customStyles?: CustomStyles;
     componentRegistry?: Record<string, React.ComponentType<any>>;
     showResponseDetails?: boolean;
     successDataPathFields?: DataPathFieldConfig[];
+    rowActions?: RowAction[];
+    onRowClick?: (rowData: any) => void;
+    rowKeyField?: string;
+    onSelectionChange?: (selectedKeys: Set<any>, selectedRows: any[]) => void;
+    tableActions?: TableAction[];
+    selectOnRowClick?: boolean;
+    selectedRowClassName?: string;
 }
 
 export function DynamicForm<TData extends FieldValues>({
@@ -70,15 +81,24 @@ export function DynamicForm<TData extends FieldValues>({
                                                            useSubmitHook,
                                                            defaultValues,
                                                            onSuccess,
+                                                           onError,
                                                            submitButtonText = 'Send',
                                                            loadingButtonText = 'Sending...',
                                                            successMessage = 'Your submission was successful!',
-                                                           successDataPath,
+                                                           successDataPath = 'result.data',
                                                            renderSuccessContent,
                                                            customStyles = {},
                                                            componentRegistry,
                                                            showResponseDetails = false,
                                                            successDataPathFields,
+                                                           rowActions,
+                                                           onRowClick,
+                                                           rowKeyField,
+                                                           onSelectionChange,
+                                                           tableActions,
+                                                           selectOnRowClick,
+                                                           selectedRowClassName,
+                                                           dynamicINDataValues,
                                                        }: DynamicFormProps<TData>) {
     const {fire, loading: hookLoading, error} = useSubmitHook({fireImmediately: false});
     const [isPending, startTransition] = useTransition();
@@ -230,14 +250,18 @@ export function DynamicForm<TData extends FieldValues>({
 
         const formData = getValues();
         const processedData = processPassthroughFields(formData);
+        const finalData = { ...dynamicINDataValues, ...processedData };
         setIsSaving(true);
-        fire(processedData)
+        fire(finalData)
             .then(result => {
                 onSuccess?.(result);
             })
-            .catch(err => console.error("[AutoSave] Submission caught an error:", err))
+            .catch(err => {
+                console.error("[AutoSave] Submission caught an error:", err);
+                onError?.(err);
+            })
             .finally(() => setIsSaving(false));
-    }, [trigger, getValues, setIsSaving, fire, onSuccess]);
+    }, [trigger, getValues, setIsSaving, fire, onSuccess, dynamicINDataValues, onError]);
 
     const runEffectsRecursively = useCallback((
         schema: z.ZodTypeAny,
@@ -338,12 +362,14 @@ export function DynamicForm<TData extends FieldValues>({
         startTransition(async () => {
             try {
                 const processedData = processPassthroughFields(formData);
-                const result = await fire(processedData);
+                const finalData = { ...dynamicINDataValues, ...processedData };
+                const result = await fire(finalData);
                 onSuccess?.(result);
-                setSuccessState({apiResponse: result, submittedValues: processedData});
+                setSuccessState({apiResponse: result, submittedValues: finalData});
                 // reset(defaultValues);
             } catch (e) {
                 console.error("Form submission caught an error:", e);
+                onError?.(e);
             }
         });
     };
@@ -576,11 +602,19 @@ export function DynamicForm<TData extends FieldValues>({
                         {renderSuccessContent ? (
                             renderSuccessContent(successState)
                         ) : successState.apiResponse ? (
-                            <div className="mt-6 w-full text-left">
+                            <div className="w-full text-left">
                                 <DataDisplayTable response={successState.apiResponse}
                                                   dataPath={successDataPath}
                                                   dataPathFields={successDataPathFields}
-                                                  showResponseDetails={showResponseDetails}/>
+                                                  showResponseDetails={showResponseDetails}
+                                                  rowActions={rowActions}
+                                                  onRowClick={onRowClick}
+                                                  rowKeyField={rowKeyField}
+                                                  onSelectionChange={onSelectionChange}
+                                                  tableActions={tableActions}
+                                                  selectOnRowClick={selectOnRowClick}
+                                                  selectedRowClassName={selectedRowClassName}
+                                                  componentRegistry={componentRegistry}/>
                             </div>
                         ) : (
                             <>
