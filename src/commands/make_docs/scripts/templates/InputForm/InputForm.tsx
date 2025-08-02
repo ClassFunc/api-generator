@@ -74,6 +74,7 @@ export interface DynamicFormProps<TData extends FieldValues> {
     tableActions?: TableAction[];
     selectOnRowClick?: boolean;
     selectedRowClassName?: string;
+    TriggerSubmitComponent?: React.ComponentType<{ triggerSubmit: () => void; isBusy: boolean }>;
 }
 
 export function DynamicForm<TData extends FieldValues>({
@@ -99,6 +100,7 @@ export function DynamicForm<TData extends FieldValues>({
                                                            selectOnRowClick,
                                                            selectedRowClassName,
                                                            dynamicINDataValues,
+                                                           TriggerSubmitComponent,
                                                        }: DynamicFormProps<TData>) {
     const {fire, loading: hookLoading, error} = useSubmitHook({fireImmediately: false});
     const [isPending, startTransition] = useTransition();
@@ -574,6 +576,7 @@ export function DynamicForm<TData extends FieldValues>({
 
     return (
         <>
+            {TriggerSubmitComponent && <TriggerSubmitComponent triggerSubmit={handleSubmit(handleFormSubmit)} isBusy={isBusy} />}
             <div className={styles.formContainer}>
                 <FormProvider {...formMethods}>
                     <form onSubmit={handleSubmit(handleFormSubmit)} className={styles.form}>
