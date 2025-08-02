@@ -1,9 +1,8 @@
-// /Users/lethanh/WebstormProjects/audits-web/components/InputForm/DataDisplayTable.tsx
 import {startCase} from "lodash";
-import React, {JSX, useState} from "react";
+import React, {JSX, useEffect, useState} from "react";
 
 /**
- * Lấy giá trị lồng nhau từ một object bằng chuỗi path (ví dụ: 'owner.name').
+ * Lấy giá trị lồng nhau từ một object bằng chuỗi path (ví dụ: \'owner.name\').
  * @param obj Object để tìm kiếm.
  * @param path Chuỗi path phân tách bằng dấu chấm hoặc mảng các key.
  * @returns Giá trị tìm thấy hoặc undefined.
@@ -57,7 +56,7 @@ export type RowAction = ({
     onClick?: never;
     useSubmitHook: ActionSubmitHook<any>;
     /**
-     * An optional function to transform the row data before it's passed to the `fire` function.
+     * An optional function to transform the row data before it\'s passed to the `fire` function.
      * If not provided, the entire `rowData` object is passed.
      * @param rowData The data for the current row.
      * @returns The data payload for the `fire` function.
@@ -85,7 +84,7 @@ export type TableAction = {
     onClick?: never;
     useSubmitHook: ActionSubmitHook<any>;
     /**
-     * An optional function to transform the selection data before it's passed to the `fire` function.
+     * An optional function to transform the selection data before it\'s passed to the `fire` function.
      * If not provided, the entire selection object `{ selectedKeys, selectedRows }` is passed.
      * @param selection The selection object containing `selectedKeys` and `selectedRows`.
      * @returns The data payload for the `fire` function.
@@ -159,6 +158,57 @@ const RowActionButton: React.FC<{
         </button>
     );
 };
+
+const RowActionCheckbox: React.FC<{
+    action: Extract<RowAction, { type: 'checkbox' }>;
+    rowData: any;
+    componentRegistry?: Record<string, React.ComponentType<any>>;
+}> = ({ action, rowData, componentRegistry }) => {
+    // Lấy giá trị checked ban đầu từ dữ liệu của hàng.
+    const initialCheckedValue = action.initialCheckedField ? getValueByPath(rowData, action.initialCheckedField) : false;
+
+    // Quản lý trạng thái checked trong component.
+    const [isChecked, setIsChecked] = useState(!!initialCheckedValue);
+
+    // Đồng bộ trạng thái nếu dữ liệu ban đầu từ props thay đổi.
+    useEffect(() => {
+        setIsChecked(!!initialCheckedValue);
+    }, [initialCheckedValue]);
+
+    const handleChange = (checked: boolean | React.ChangeEvent<HTMLInputElement>) => {
+        const isCheckedBool = typeof checked === 'boolean' ? checked : checked.target.checked;
+        // Cập nhật trạng thái nội bộ.
+        setIsChecked(isCheckedBool);
+        // Gọi callback onChange của người dùng (nếu có).
+        action.onChange?.(rowData, isCheckedBool);
+    };
+
+    const CheckboxComponent = componentRegistry?.['checkbox'] as React.ElementType;
+    const commonProps = {
+        checked: isChecked,
+        onClick: (e: React.MouseEvent) => e.stopPropagation(),
+        className: action.className,
+    };
+
+    if (CheckboxComponent) {
+        return (
+            <CheckboxComponent
+                {...commonProps}
+                onCheckedChange={handleChange}
+            />
+        );
+    }
+
+    return (
+        <input
+            type="checkbox"
+            {...commonProps}
+            onChange={handleChange}
+            className={`h-4 w-4 rounded border-gray-300 text-primary focus:ring-primary ${action.className || ''}`}
+        />
+    );
+};
+
 
 const TableActionButton: React.FC<{
     action: TableAction;
@@ -331,6 +381,9 @@ const RecursiveRenderer = (
                     <table className="w-full text-sm">
                         <thead className="bg-muted/40">
                         <tr className="border-b">
+                            {selectOnRowClick && rowKeyField && (
+                                <th className="p-2 w-4"></th>
+                            )}
                             {headers.map(headerConfig => (
                                 <th key={headerConfig.path}
                                     className={`p-2 text-left font-semibold text-foreground capitalize break-words max-w-[250px] ${headerConfig.className || ''}`}>
@@ -363,11 +416,32 @@ const RecursiveRenderer = (
                                             handleInternalSelectionChange(item, !isCurrentlySelected);
                                         }
                                     }
-                                    // Always call the user's onRowClick if provided
+                                    // Always call the user\'s onRowClick if provided
                                     if (onRowClick) {
                                         onRowClick(item);
                                     }
                                     }}>
+                                    {selectOnRowClick && rowKeyField && (
+                                        <td className="p-2 align-middle text-center">
+                                            <div className="flex justify-center">
+                                                {CheckboxComponent ? (
+                                                    <CheckboxComponent
+                                                        checked={isSelected}
+                                                        onCheckedChange={(checked: boolean) => handleInternalSelectionChange?.(item, checked)}
+                                                        onClick={(e: React.MouseEvent) => e.stopPropagation()}
+                                                    />
+                                                ) : (
+                                                    <input
+                                                        type="checkbox"
+                                                        checked={isSelected}
+                                                        onChange={(e) => handleInternalSelectionChange?.(item, e.target.checked)}
+                                                        onClick={(e) => e.stopPropagation()}
+                                                        className="h-4 w-4 rounded border-gray-300 text-primary focus:ring-primary"
+                                                    />
+                                                )}
+                                            </div>
+                                        </td>
+                                    )}
                                     {headers.map(headerConfig => (
                                     <td key={headerConfig.path}
                                         className={`p-2 align-middle text-center text-muted-foreground break-words max-w-[250px] ${headerConfig.as !== 'image' ? headerConfig.className || '' : ''}`}>
@@ -389,47 +463,14 @@ const RecursiveRenderer = (
                                                                             componentRegistry={componentRegistry}/>
                                                 }
                                                 if (action.type === 'checkbox') {
-                                                    let isRowChecked = false;
-
-                                                    // If rowKeyField is provided, state is managed internally and is the source of truth.
-                                                    if (rowKeyField && selectedRows) {
-                                                        const key = getValueByPath(item, rowKeyField);
-                                                        isRowChecked = key !== undefined ? selectedRows.has(key) : false;
+                                                    if (!action.initialCheckedField && process.env.NODE_ENV === 'development') {
+                                                        console.warn(`[DataDisplayTable] Checkbox action should have an 'initialCheckedField' to determine its state.`, { action, item });
                                                     }
-                                                    // Otherwise, fall back to controlled or uncontrolled modes.
-                                                    else if (action.initialCheckedField) {
-                                                        isRowChecked = !!getValueByPath(item, action.initialCheckedField);
-                                                    } else {
-                                                        if (process.env.NODE_ENV === 'development') {
-                                                            console.warn(`[DataDisplayTable] Checkbox action requires 'rowKeyField' for managed state, or 'initialCheckedField' for unmanaged state.`, { action, item });
-                                                        }
-                                                    }
-
-                                                    const CheckboxComponent = componentRegistry?.['checkbox'] as React.ElementType;
-                                                    const handleChange = (checked: boolean | React.ChangeEvent<HTMLInputElement>) => {
-                                                        const isCheckedBool = typeof checked === 'boolean' ? checked : checked.target.checked;
-                                                        if (rowKeyField && handleInternalSelectionChange) {
-                                                            handleInternalSelectionChange(item, isCheckedBool);
-                                                        }
-                                                        action.onChange?.(item, isCheckedBool);
-                                                    };
-
-                                                    if (CheckboxComponent) {
-                                                        return <CheckboxComponent
-                                                            key={actionIndex}
-                                                            checked={isRowChecked}
-                                                            onCheckedChange={handleChange}
-                                                            onClick={(e: React.MouseEvent) => e.stopPropagation()}
-                                                            className={action.className}
-                                                        />
-                                                    }
-                                                    return <input
-                                                        type="checkbox"
+                                                    return <RowActionCheckbox
                                                         key={actionIndex}
-                                                        checked={isRowChecked}
-                                                        onChange={handleChange}
-                                                        onClick={(e) => e.stopPropagation()}
-                                                        className={`h-4 w-4 rounded border-gray-300 text-primary focus:ring-primary ${action.className || ''}`}
+                                                        action={action}
+                                                        rowData={item}
+                                                        componentRegistry={componentRegistry}
                                                     />;
                                                 }
                                                 return null;
@@ -580,32 +621,6 @@ export const DataDisplayTable = (
     }) => {
     const [selectedRows, setSelectedRows] = useState(new Map<any, any>());
 
-    // Initialize selection state based on `initialCheckedField` when response data is available.
-    React.useEffect(() => {
-        if (!rowKeyField || !response) {
-            return;
-        }
-
-        const checkboxAction = rowActions?.find(a => a.type === 'checkbox');
-        if (!checkboxAction || checkboxAction.type !== 'checkbox' || !checkboxAction.initialCheckedField) {
-            return;
-        }
-
-        const dataArray = dataPath ? getValueByPath(response, dataPath) : response;
-        if (!Array.isArray(dataArray)) {
-            return;
-        }
-
-        const newMap = new Map();
-        for (const item of dataArray) {
-            const key = getValueByPath(item, rowKeyField);
-            const isChecked = getValueByPath(item, checkboxAction.initialCheckedField);
-            if (key !== undefined && isChecked === true) {
-                newMap.set(key, item);
-            }
-        }
-        setSelectedRows(newMap);
-    }, [response, dataPath, rowKeyField, rowActions]);
     const handleInternalSelectionChange = (row: any, isChecked: boolean) => {
         if (!rowKeyField) return; // Safeguard
         const key = getValueByPath(row, rowKeyField);

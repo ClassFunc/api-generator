@@ -1,7 +1,7 @@
 import React, {useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState} from "react";
 // @ts-ignore
 import useGreetingApi from "./useGreetingApi"
-import {filter, flatten, get, isEqual, isObject, isPlainObject, Many, merge, omit, orderBy, uniqBy} from 'lodash'
+import {filter, flatten, get, isEqual, isObject, isPlainObject, Many, merge, omit, orderBy, set, uniqBy} from 'lodash'
 // @ts-ignore
 import {GreetingIN, GreetingOUT, ResponseError} from "../"
 import {atom, useAtom, useAtomValue} from "jotai";
@@ -103,8 +103,9 @@ interface Props extends ResultDataInnerComponentProps, ApiConfigParamsProps {
         fn: (item: any) => boolean;
     };
     abortAble?: boolean;
-    hasMorePath?: keyof Result | string;
+    hasMorePath?: keyof Result | string | ((result: any) => boolean);
     nextCursorPath?: keyof Result | string;
+    nextCursorQuerySetPath?: string;
     countPath?: keyof Result | string;
     dataPath?: keyof Result | string;
     cachedDataListFilter?: string | Record<string, any>;
@@ -152,6 +153,7 @@ export const useGreetingPost = (
         inDataDebugger = false,
         useForm = false,
         formProps = {},
+        nextCursorQuerySetPath,
     }: Props
 ) => {
     const {api} = useGreetingApi(apiConfigParams, apiConfigOptions);
@@ -503,7 +505,7 @@ export const useGreetingPost = (
                 if (abortControllerRef.current === localAbortController) {
                     abortControllerRef.current = null;
                     activeRequestInDataRef.current = null;
-                    logDev("Cleared global abort refs for inData:", currentCallInData);
+                    logDev("--- Cleared global abort refs for inData ---", /*currentCallInData*/);
                 } else {
                     logDev("Global abort refs were for a different/newer request. Not clearing for inData:", currentCallInData);
                 }
@@ -641,7 +643,7 @@ export const useGreetingPost = (
     const result = useMemo(() => {
         if (!response)
             return null;
-        return response.result as unknown as Result;
+        return response?.result ?? response as unknown as Result;
     }, [response])
 
     const getDataFn = (response?: OUT, dataPath?: keyof Result | string, defaultValues: any = null) => {
@@ -663,6 +665,9 @@ export const useGreetingPost = (
     const hasMore = useMemo(() => {
         if (!result || !hasMorePath || !isObject(result))
             return false;
+        if (typeof hasMorePath === 'function') {
+            return hasMorePath(result)
+        }
         if (hasMorePath && hasMorePath in result) {
             return get(result, hasMorePath, false)
         }
@@ -777,11 +782,10 @@ export const useGreetingPost = (
             return;
         }
 
-        const newInData = merge(
-            _inData,
-            {
-                [nextCursorPath]: nextCursor
-            },
+        const newInData = set(
+            _inData || {},
+            nextCursorQuerySetPath || nextCursorPath,
+            nextCursor
         );
 
         logDev("Loading more with new inData:", newInData);
