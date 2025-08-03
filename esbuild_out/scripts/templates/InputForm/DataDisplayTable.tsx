@@ -1,8 +1,8 @@
 import {startCase} from "lodash";
-import React, {JSX, useEffect, useState} from "react";
+import React, {JSX, useEffect, useMemo, useState} from "react";
 
 /**
- * Lấy giá trị lồng nhau từ một object bằng chuỗi path (ví dụ: \'owner.name\').
+ * Lấy giá trị lồng nhau từ một object bằng chuỗi path (ví dụ: 'owner.name').
  * @param obj Object để tìm kiếm.
  * @param path Chuỗi path phân tách bằng dấu chấm hoặc mảng các key.
  * @returns Giá trị tìm thấy hoặc undefined.
@@ -56,7 +56,7 @@ export type RowAction = ({
     onClick?: never;
     useSubmitHook: ActionSubmitHook<any>;
     /**
-     * An optional function to transform the row data before it\'s passed to the `fire` function.
+     * An optional function to transform the row data before it's passed to the `fire` function.
      * If not provided, the entire `rowData` object is passed.
      * @param rowData The data for the current row.
      * @returns The data payload for the `fire` function.
@@ -84,7 +84,7 @@ export type TableAction = {
     onClick?: never;
     useSubmitHook: ActionSubmitHook<any>;
     /**
-     * An optional function to transform the selection data before it\'s passed to the `fire` function.
+     * An optional function to transform the selection data before it's passed to the `fire` function.
      * If not provided, the entire selection object `{ selectedKeys, selectedRows }` is passed.
      * @param selection The selection object containing `selectedKeys` and `selectedRows`.
      * @returns The data payload for the `fire` function.
@@ -106,12 +106,12 @@ const RowActionButton: React.FC<{
     action: Extract<RowAction, { type: 'button' }>;
     rowData: any;
     componentRegistry?: Record<string, React.ComponentType<any>>;
-}> = ({ action, rowData, componentRegistry }) => {
-    const { className, label } = action;
+}> = ({action, rowData, componentRegistry}) => {
+    const {className, label} = action;
     const ButtonComponent = componentRegistry?.['button'] as React.ElementType | undefined;
 
     if (action.useSubmitHook) {
-        const { fire, loading } = action.useSubmitHook({ fireImmediately: false });
+        const {fire, loading} = action.useSubmitHook({fireImmediately: false});
         const handleClick = (e: React.MouseEvent) => {
             e.stopPropagation();
             const dataToSend = action.mapData ? action.mapData(rowData) : rowData;
@@ -163,7 +163,7 @@ const RowActionCheckbox: React.FC<{
     action: Extract<RowAction, { type: 'checkbox' }>;
     rowData: any;
     componentRegistry?: Record<string, React.ComponentType<any>>;
-}> = ({ action, rowData, componentRegistry }) => {
+}> = ({action, rowData, componentRegistry}) => {
     // Lấy giá trị checked ban đầu từ dữ liệu của hàng.
     const initialCheckedValue = action.initialCheckedField ? getValueByPath(rowData, action.initialCheckedField) : false;
 
@@ -214,22 +214,25 @@ const TableActionButton: React.FC<{
     action: TableAction;
     selection: { selectedKeys: Set<any>, selectedRows: any[] };
     componentRegistry?: Record<string, React.ComponentType<any>>;
-}> = ({ action, selection, componentRegistry }) => {
-    const { className, label } = action;
+}> = ({action, selection, componentRegistry}) => {
+    const {className, label} = action;
     const hasSelection = selection.selectedKeys.size > 0;
     const ButtonComponent = componentRegistry?.['button'] as React.ElementType | undefined;
 
     if (action.useSubmitHook) {
-        const { fire, loading } = action.useSubmitHook({ fireImmediately: false });
+        const {fire, loading} = action.useSubmitHook({fireImmediately: false});
         const handleClick = () => {
             const dataToSend = action.mapSelection ? action.mapSelection(selection) : selection;
             fire(dataToSend).catch(err => console.error("[TableAction] Submit hook error:", err));
         };
 
         if (ButtonComponent) {
-            return <ButtonComponent variant="outline" size="sm" className={className} disabled={!hasSelection || loading} onClick={handleClick}>{loading ? '...' : label}</ButtonComponent>
+            return <ButtonComponent variant="outline" size="sm" className={className}
+                                    disabled={!hasSelection || loading}
+                                    onClick={handleClick}>{loading ? '...' : label}</ButtonComponent>
         }
-        return <button disabled={!hasSelection || loading} onClick={handleClick} className={`px-3 py-1 text-sm border rounded-md transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${className || 'bg-white hover:bg-gray-100'}`}>{loading ? '...' : label}</button>
+        return <button disabled={!hasSelection || loading} onClick={handleClick}
+                       className={`px-3 py-1 text-sm border rounded-md transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${className || 'bg-white hover:bg-gray-100'}`}>{loading ? '...' : label}</button>
     }
 
     // Simple onClick
@@ -238,9 +241,11 @@ const TableActionButton: React.FC<{
     };
 
     if (ButtonComponent) {
-        return <ButtonComponent variant="outline" size="sm" className={className} disabled={!hasSelection} onClick={handleClick}>{label}</ButtonComponent>
+        return <ButtonComponent variant="outline" size="sm" className={className} disabled={!hasSelection}
+                                onClick={handleClick}>{label}</ButtonComponent>
     }
-    return <button disabled={!hasSelection} onClick={handleClick} className={`px-3 py-1 text-sm border rounded-md transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${className || 'bg-white hover:bg-gray-100'}`}>{label}</button>
+    return <button disabled={!hasSelection} onClick={handleClick}
+                   className={`px-3 py-1 text-sm border rounded-md transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${className || 'bg-white hover:bg-gray-100'}`}>{label}</button>
 };
 
 /**
@@ -256,13 +261,16 @@ const RecursiveRenderer = (
         onRowClick,
         rowActions,
         rowKeyField,
-        selectedRows,
-        handleInternalSelectionChange,
+        selectedKeys,
+        onSelectionChange,
         selectOnRowClick,
         clickable,
         selectedRowClassName,
         className,
-        componentRegistry
+        componentRegistry,
+        showDataTableHeaders,
+        showRowNumber,
+        InfiniteLoading
     }: {
         data: any,
         dataPathFields?: DataPathFieldConfig[],
@@ -270,13 +278,16 @@ const RecursiveRenderer = (
         onRowClick?: (rowData: any) => void,
         rowActions?: RowAction[],
         rowKeyField?: string,
-        selectedRows?: Map<any, any>,
-        handleInternalSelectionChange?: (row: any, isChecked: boolean) => void,
+        selectedKeys?: Set<any>,
+        onSelectionChange?: (row: any, isChecked: boolean) => void,
         selectOnRowClick?: boolean,
         clickable?: boolean,
         selectedRowClassName?: string,
         className?: string,
-        componentRegistry?: Record<string, React.ComponentType<any>>
+        componentRegistry?: Record<string, React.ComponentType<any>>,
+        showDataTableHeaders?: boolean,
+        showRowNumber?: boolean,
+        InfiniteLoading?: React.ComponentType<any>,
     }): JSX.Element | null => {
     // --- Các trường hợp cơ bản (điểm dừng của đệ quy) ---
     if (data === null || data === undefined) {
@@ -289,7 +300,7 @@ const RecursiveRenderer = (
         if (renderAs === 'checkbox') {
             if (data) {
                 if (CheckboxComponent) {
-                    return <div className="flex justify-center"><CheckboxComponent checked={true} disabled /></div>;
+                    return <div className="flex justify-center"><CheckboxComponent checked={true} disabled/></div>;
                 }
                 return <div className="flex justify-center"><input type="checkbox" checked={true} disabled
                                                                    className="h-4 w-4 rounded border-gray-300 text-primary focus:ring-primary"/>
@@ -313,7 +324,8 @@ const RecursiveRenderer = (
 
             if (renderAs === 'image' || (!renderAs && isImageUrl)) {
                 content = (
-                    <a href={data} target="_blank" rel="noopener noreferrer" title="Click to open in new tab" className="inline-flex justify-center">
+                    <a href={data} target="_blank" rel="noopener noreferrer" title="Click to open in new tab"
+                       className="inline-flex justify-center" onClick={(e) => e.stopPropagation()}>
                         <img
                             src={data}
                             alt="Preview"
@@ -326,7 +338,8 @@ const RecursiveRenderer = (
                 content = <video src={data} controls className="max-w-[250px] rounded-md"/>;
             } else if (renderAs === 'url' || (!renderAs && isHttpUrl)) {
                 content = (
-                    <a href={data} target="_blank" rel="noopener noreferrer" className="text-blue-500 hover:underline">
+                    <a href={data} target="_blank" rel="noopener noreferrer" className="text-blue-500 hover:underline"
+                       onClick={(e) => e.stopPropagation()}>
                         {data}
                     </a>
                 );
@@ -344,7 +357,8 @@ const RecursiveRenderer = (
         if (clickable && !isLink && data) {
             return (
                 <a href={String(data)} target="_blank" rel="noopener noreferrer"
-                   className="text-blue-500 hover:underline">
+                   className="text-blue-500 hover:underline"
+                   onClick={(e) => e.stopPropagation()}>
                     {content}
                 </a>
             );
@@ -376,111 +390,128 @@ const RecursiveRenderer = (
                 headers = autoHeaders.map(h => ({path: h})); // `as` is undefined, allowing auto-detection
             }
 
+            const colSpan = (showRowNumber ? 1 : 0) + (selectOnRowClick && rowKeyField ? 1 : 0) + headers.length + (hasActions ? 1 : 0);
+
             return (
                 <div className="border rounded-md bg-muted/20 my-1">
                     <table className="w-full text-sm">
-                        <thead className="bg-muted/40">
-                        <tr className="border-b">
-                            {selectOnRowClick && rowKeyField && (
-                                <th className="p-2 w-4"></th>
-                            )}
-                            {headers.map(headerConfig => (
-                                <th key={headerConfig.path}
-                                    className={`p-2 text-left font-semibold text-foreground capitalize break-words max-w-[250px] ${headerConfig.className || ''}`}>
-                                    {/* Hiển thị header dễ đọc hơn, thay . và _ bằng khoảng trắng */}
-                                    {headerConfig.path.replace(/_/g, ' ').replace(/\./g, ' ')}
-                                </th>
-                            ))}
-                            {hasActions && (
-                                <th className="p-2 text-left font-semibold text-foreground">Actions</th>
-                            )}
-                        </tr>
-                        </thead>
+                        {(showDataTableHeaders ?? true) && (
+                            <thead className="bg-muted/40">
+                            <tr className="border-b">
+                                {showRowNumber && (
+                                    <th className="p-2 w-12 text-center font-semibold text-foreground">#</th>
+                                )}
+                                {selectOnRowClick && rowKeyField && (
+                                    <th className="p-2 w-4"></th>
+                                )}
+                                {headers.map(headerConfig => (
+                                    <th key={headerConfig.path}
+                                        className={`p-2 text-left font-semibold text-foreground capitalize break-words max-w-[250px] ${headerConfig.className || ''}`}>
+                                        {/* Hiển thị header dễ đọc hơn, thay . và _ bằng khoảng trắng */}
+                                        {headerConfig.path.replace(/_/g, ' ').replace(/\./g, ' ')}
+                                    </th>
+                                ))}
+                                {hasActions && (
+                                    <th className="p-2 text-left font-semibold text-foreground">Actions</th>
+                                )}
+                            </tr>
+                            </thead>
+                        )}
                         <tbody>
                         {data.map((item, index) => {
                             const key = rowKeyField ? getValueByPath(item, rowKeyField) : undefined;
-                            const isSelected = key !== undefined && !!selectedRows?.has(key);
+                            const isSelected = key !== undefined && !!selectedKeys?.has(key);
 
                             return (
                                 <tr key={index}
                                     className={`border-b last:border-b-0 hover:bg-muted/30 ${(onRowClick || (selectOnRowClick && rowKeyField)) ? 'cursor-pointer' : ''} ${isSelected ? selectedRowClassName || '' : ''}`}
                                     onClick={(e) => {
-                                        const ButtonComponent = componentRegistry?.['button'] as React.ElementType;
-                                        const CheckboxComponent = componentRegistry?.['checkbox'] as React.ElementType;
-                                    e.stopPropagation();
-                                    // Handle selection toggle if enabled
-                                    if (selectOnRowClick && rowKeyField && handleInternalSelectionChange) {
-                                        const key = getValueByPath(item, rowKeyField);
-                                        if (key !== undefined) {
-                                            const isCurrentlySelected = selectedRows?.has(key) ?? false;
-                                            handleInternalSelectionChange(item, !isCurrentlySelected);
+                                        e.stopPropagation();
+                                        // Handle selection toggle if enabled
+                                        if (selectOnRowClick && rowKeyField && onSelectionChange) {
+                                            const key = getValueByPath(item, rowKeyField);
+                                            if (key !== undefined) {
+                                                const isCurrentlySelected = selectedKeys?.has(key) ?? false;
+                                                onSelectionChange(item, !isCurrentlySelected);
+                                            }
                                         }
-                                    }
-                                    // Always call the user\'s onRowClick if provided
-                                    if (onRowClick) {
-                                        onRowClick(item);
-                                    }
+                                        // Always call the user's onRowClick if provided
+                                        if (onRowClick) {
+                                            onRowClick(item);
+                                        }
                                     }}>
-                                    {selectOnRowClick && rowKeyField && (
-                                        <td className="p-2 align-middle text-center">
-                                            <div className="flex justify-center">
-                                                {CheckboxComponent ? (
-                                                    <CheckboxComponent
-                                                        checked={isSelected}
-                                                        onCheckedChange={(checked: boolean) => handleInternalSelectionChange?.(item, checked)}
-                                                        onClick={(e: React.MouseEvent) => e.stopPropagation()}
-                                                    />
-                                                ) : (
-                                                    <input
-                                                        type="checkbox"
-                                                        checked={isSelected}
-                                                        onChange={(e) => handleInternalSelectionChange?.(item, e.target.checked)}
-                                                        onClick={(e) => e.stopPropagation()}
-                                                        className="h-4 w-4 rounded border-gray-300 text-primary focus:ring-primary"
-                                                    />
-                                                )}
-                                            </div>
-                                        </td>
+                                    {showRowNumber && (
+                                        <td className="p-2 align-middle text-center text-muted-foreground">{index + 1}</td>
                                     )}
-                                    {headers.map(headerConfig => (
-                                    <td key={headerConfig.path}
-                                        className={`p-2 align-middle text-center text-muted-foreground break-words max-w-[250px] ${headerConfig.as !== 'image' ? headerConfig.className || '' : ''}`}>
-                                        {/* Lấy giá trị theo path nếu header là dạng nested */}
-                                        {/* Không truyền rowActions xuống dưới để tránh lặp lại cột action trong bảng con */}
-                                        <RecursiveRenderer data={getValueByPath(item, headerConfig.path)}
-                                                           renderAs={headerConfig.as} onRowClick={onRowClick}
-                                                           clickable={headerConfig.clickable}
-                                                           className={headerConfig.className}
-                                                           componentRegistry={componentRegistry}/>
+                                    {selectOnRowClick && rowKeyField && (
+                                    <td className="p-2 align-middle text-center">
+                                        <div className="flex justify-center">
+                                            {CheckboxComponent ? (
+                                                <CheckboxComponent
+                                                    checked={isSelected}
+                                                    onCheckedChange={(checked: boolean) => onSelectionChange?.(item, checked)}
+                                                    onClick={(e: React.MouseEvent) => e.stopPropagation()}
+                                                />
+                                            ) : (
+                                                <input
+                                                    type="checkbox"
+                                                    checked={isSelected}
+                                                    onChange={(e) => onSelectionChange?.(item, e.target.checked)}
+                                                    onClick={(e) => e.stopPropagation()}
+                                                    className="h-4 w-4 rounded border-gray-300 text-primary focus:ring-primary"
+                                                />
+                                            )}
+                                        </div>
                                     </td>
-                                ))}
+                                )}
+                                    {headers.map(headerConfig => (
+                                        <td key={headerConfig.path}
+                                            className={`p-2 align-middle text-center text-muted-foreground break-words max-w-[250px] ${headerConfig.as !== 'image' ? headerConfig.className || '' : ''}`}>
+                                            {/* Lấy giá trị theo path nếu header là dạng nested */}
+                                            {/* Không truyền rowActions xuống dưới để tránh lặp lại cột action trong bảng con */}
+                                            <RecursiveRenderer data={getValueByPath(item, headerConfig.path)}
+                                                               renderAs={headerConfig.as} onRowClick={onRowClick}
+                                                               clickable={headerConfig.clickable}
+                                                               className={headerConfig.className}
+                                                               componentRegistry={componentRegistry}/>
+                                        </td>
+                                    ))}
                                     {hasActions && (
                                         <td className="p-2 align-middle">
-                                        <div className="flex items-center gap-2">
-                                            {rowActions.map((action, actionIndex) => {
-                                                if (action.type === 'button') {
-                                                    return <RowActionButton key={actionIndex} action={action} rowData={item}
-                                                                            componentRegistry={componentRegistry}/>
-                                                }
-                                                if (action.type === 'checkbox') {
-                                                    if (!action.initialCheckedField && process.env.NODE_ENV === 'development') {
-                                                        console.warn(`[DataDisplayTable] Checkbox action should have an 'initialCheckedField' to determine its state.`, { action, item });
+                                            <div className="flex items-center gap-2">
+                                                {rowActions.map((action, actionIndex) => {
+                                                    if (action.type === 'button') {
+                                                        return <RowActionButton key={actionIndex} action={action}
+                                                                                rowData={item}
+                                                                                componentRegistry={componentRegistry}/>
                                                     }
-                                                    return <RowActionCheckbox
-                                                        key={actionIndex}
-                                                        action={action}
-                                                        rowData={item}
-                                                        componentRegistry={componentRegistry}
-                                                    />;
-                                                }
-                                                return null;
-                                            })}
-                                        </div>
+                                                    if (action.type === 'checkbox') {
+                                                        if (!action.initialCheckedField && process.env.NODE_ENV === 'development') {
+                                                            console.warn(`[DataDisplayTable] Checkbox action should have an 'initialCheckedField' to determine its state.`, {
+                                                                action,
+                                                                item
+                                                            });
+                                                        }
+                                                        return <RowActionCheckbox
+                                                            key={actionIndex}
+                                                            action={action}
+                                                            rowData={item}
+                                                            componentRegistry={componentRegistry}
+                                                        />;
+                                                    }
+                                                    return null;
+                                                })}
+                                            </div>
                                         </td>
                                     )}
                                 </tr>
                             );
                         })}
+                        {InfiniteLoading && (
+                            <tr>
+                                <td colSpan={colSpan} className="p-0"><InfiniteLoading /></td>
+                            </tr>
+                        )}
                         </tbody>
                     </table>
                 </div>
@@ -491,11 +522,16 @@ const RecursiveRenderer = (
         return (
             <div className="border rounded-md bg-muted/20 my-1">
                 <table className="w-full text-sm">
-                    <thead className="bg-muted/40">
-                    <tr className="border-b">
-                        <th className="p-2 text-left font-semibold text-foreground">Value</th>
-                    </tr>
-                    </thead>
+                    {(showDataTableHeaders ?? true) && (
+                        <thead className="bg-muted/40">
+                        <tr className="border-b">
+                            {showRowNumber && (
+                                <th className="p-2 w-12 text-center font-semibold text-foreground">#</th>
+                            )}
+                            <th className="p-2 text-left font-semibold text-foreground">Value</th>
+                        </tr>
+                        </thead>
+                    )}
                     <tbody>
                     {data.map((item, index) => (
                         <tr key={index}
@@ -508,16 +544,26 @@ const RecursiveRenderer = (
                                     onRowClick(item);
                                 }
                             }}>
+                            {showRowNumber && (
+                                <td className="p-2 align-middle text-center text-muted-foreground">{index + 1}</td>
+                            )}
                             <td className="p-2 align-middle text-center text-muted-foreground break-words">
                                 {/* Đệ quy ở đây, không truyền showableFields xuống cấp dưới */}
                                 <RecursiveRenderer data={item} onRowClick={onRowClick}
-                                                   selectOnRowClick={selectOnRowClick} componentRegistry={componentRegistry}/>
+                                                   selectOnRowClick={selectOnRowClick}
+                                                   componentRegistry={componentRegistry}/>
                             </td>
                         </tr>
                     ))}
+                    {InfiniteLoading && (
+                        <tr>
+                            <td colSpan={showRowNumber ? 2 : 1} className="p-0"><InfiniteLoading /></td>
+                        </tr>
+                    )}
                     </tbody>
                 </table>
             </div>
+
         );
     }
 
@@ -596,7 +642,9 @@ export const DataDisplayTable = (
         response,
         dataPath,
         dataPathFields,
-        showResponseDetails = false,
+        showResponseDetailsHeader = false,
+        showDataTableHeaders = true,
+        showRowNumber = false,
         onRowClick,
         rowActions,
         rowKeyField,
@@ -604,42 +652,43 @@ export const DataDisplayTable = (
         tableActions,
         selectOnRowClick,
         selectedRowClassName,
-        componentRegistry
+        componentRegistry,
+        selectedKeys = new Set(),
+        rootRefSetter,
+        handleRootScroll,
+        InfiniteLoading,
     }: {
         response: any,
         dataPath?: string,
         dataPathFields?: DataPathFieldConfig[],
-        showResponseDetails?: boolean,
+        showResponseDetailsHeader?: boolean,
+        showDataTableHeaders?: boolean,
+        showRowNumber?: boolean,
         onRowClick?: (rowData: any) => void,
         rowActions?: RowAction[],
         rowKeyField?: string,
-        onSelectionChange?: (selectedKeys: Set<any>, selectedRows: any[]) => void;
+        onSelectionChange?: (row: any, isChecked: boolean) => void;
         tableActions?: TableAction[],
         selectOnRowClick?: boolean,
         selectedRowClassName?: string,
         componentRegistry?: Record<string, React.ComponentType<any>>,
+        selectedKeys?: Set<any>,
+        rootRefSetter?: (node: HTMLDivElement | null) => void,
+        handleRootScroll?: () => void,
+        InfiniteLoading?: React.ComponentType<any>,
     }) => {
-    const [selectedRows, setSelectedRows] = useState(new Map<any, any>());
 
-    const handleInternalSelectionChange = (row: any, isChecked: boolean) => {
-        if (!rowKeyField) return; // Safeguard
-        const key = getValueByPath(row, rowKeyField);
-        if (key === undefined) {
-            if (process.env.NODE_ENV === 'development') {
-                console.warn(`[DataDisplayTable] Key not found for row using 'rowKeyField: "${rowKeyField}"'.`, { row });
-            }
-            return;
-        }
+    const isComplexResponse = dataPath && typeof response === 'object' && response !== null && !Array.isArray(response);
+    const mainData = isComplexResponse ? getValueByPath(response, dataPath) : response;
 
-        const newSelectedRows = new Map(selectedRows);
-        if (isChecked) newSelectedRows.set(key, row);
-        else newSelectedRows.delete(key);
+    const selectedRows = useMemo(() => {
+        if (!rowKeyField || !Array.isArray(mainData)) return [];
+        return mainData.filter(row => {
+            const key = getValueByPath(row, rowKeyField);
+            return key !== undefined && selectedKeys.has(key);
+        });
+    }, [mainData, selectedKeys, rowKeyField]);
 
-        setSelectedRows(newSelectedRows);
-        onSelectionChange?.(new Set(newSelectedRows.keys()), Array.from(newSelectedRows.values()));
-    };
-
-    const selectedKeys = new Set(selectedRows.keys());
     const hasSelection = selectedKeys.size > 0;
 
     const tableActionsToolbar = tableActions && tableActions.length > 0 && (
@@ -648,19 +697,17 @@ export const DataDisplayTable = (
                 <TableActionButton
                     key={index}
                     action={action}
-                    selection={{selectedKeys, selectedRows: Array.from(selectedRows.values())}}
+                    selection={{selectedKeys, selectedRows}}
                     componentRegistry={componentRegistry}
                 />
             ))}
         </div>
     );
 
-    const isComplexResponse = dataPath && typeof response === 'object' && response !== null && !Array.isArray(response);
-
     // Nếu không phải là response phức tạp cần tách, render toàn bộ
     if (!isComplexResponse) {
         return (
-            <div className="w-full">
+            <div className="w-full" ref={rootRefSetter} onScroll={handleRootScroll}>
                 <div className="flex justify-between items-center mb-4">
                     <h3 className="text-xl font-semibold text-foreground">Submission Result</h3>
                     {tableActionsToolbar}
@@ -671,18 +718,21 @@ export const DataDisplayTable = (
                                        onRowClick={onRowClick}
                                        rowActions={rowActions}
                                        rowKeyField={rowKeyField}
-                                       selectedRows={selectedRows}
-                                       handleInternalSelectionChange={handleInternalSelectionChange}
+                                       selectedKeys={selectedKeys}
+                                       onSelectionChange={onSelectionChange}
                                        selectOnRowClick={selectOnRowClick}
                                        selectedRowClassName={selectedRowClassName}
-                                       componentRegistry={componentRegistry}/>
+                                       componentRegistry={componentRegistry}
+                                       showDataTableHeaders={showDataTableHeaders}
+                                       showRowNumber={showRowNumber}
+                                       InfiniteLoading={InfiniteLoading}
+                    />
                 </div>
             </div>
         );
     }
 
     // Tách dữ liệu chính và các thông tin phụ
-    const mainData = getValueByPath(response, dataPath);
     const otherData = JSON.parse(JSON.stringify(response)); // Clone để không ảnh hưởng object gốc
     unsetByPath(otherData, dataPath);
     const hasOtherData = Object.keys(otherData).length > 0;
@@ -691,8 +741,8 @@ export const DataDisplayTable = (
     const mainDataTitle = startCase(dataPath.split('.').join(' '));
 
     return (
-        <div className="w-full">
-            {showResponseDetails && (
+        <div className="w-full" ref={rootRefSetter} onScroll={handleRootScroll}>
+            {showResponseDetailsHeader && (
                 <div className="flex justify-between items-center mb-4">
                     <h3 className="text-xl font-semibold text-foreground">
                         Submission Result
@@ -701,11 +751,14 @@ export const DataDisplayTable = (
             )}
             <div className="space-y-6 rounded-lg overflow-x-auto">
                 {/* Hiển thị các thông tin phụ của response */}
-                {showResponseDetails && hasOtherData && (
+                {showResponseDetailsHeader && hasOtherData && (
                     <div>
                         <h4 className="text-lg font-medium text-foreground mb-2 pb-2 border-b">Response Details</h4>
                         {/* Actions không áp dụng cho phần details phụ */}
-                        <RecursiveRenderer data={otherData} onRowClick={onRowClick} componentRegistry={componentRegistry}/>
+                        <RecursiveRenderer data={otherData} onRowClick={onRowClick}
+                                           componentRegistry={componentRegistry}
+                                           showDataTableHeaders={showDataTableHeaders}
+                                           showRowNumber={showRowNumber}/>
                     </div>
                 )}
 
@@ -723,11 +776,15 @@ export const DataDisplayTable = (
                                            onRowClick={onRowClick}
                                            rowActions={rowActions}
                                            rowKeyField={rowKeyField}
-                                           selectedRows={selectedRows}
-                                           handleInternalSelectionChange={handleInternalSelectionChange}
+                                           selectedKeys={selectedKeys}
+                                           onSelectionChange={onSelectionChange}
                                            selectOnRowClick={selectOnRowClick}
                                            selectedRowClassName={selectedRowClassName}
-                                           componentRegistry={componentRegistry}/>
+                                           componentRegistry={componentRegistry}
+                                           showDataTableHeaders={showDataTableHeaders}
+                                           showRowNumber={showRowNumber}
+                                           InfiniteLoading={InfiniteLoading}
+                        />
                     </div>
                 )}
             </div>

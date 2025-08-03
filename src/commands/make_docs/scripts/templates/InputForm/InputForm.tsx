@@ -27,11 +27,18 @@ export const fieldLoadingAtom = atom<Record<string, boolean>>({});
 export const formSavingAtom = atom(false);
 
 // --- Types ---
-type SubmitHook<TData extends FieldValues> = (options?: { fireImmediately?: boolean }) => {
+type SubmitHook<TData extends FieldValues> = () => {
     fire: (data: TData) => Promise<any>;
     loading: boolean;
     error: Error | null;
     data: any;
+    dataList: any[];
+    response: any;
+    // infinite loading;
+    InfiniteLoading: React.ComponentType<any>;
+    rootRefSetter: (node: HTMLDivElement | null) => void;
+    handleRootScroll: () => void;
+    resetCachedResponseStore: () => void;
 };
 
 type AllStyleKeys =
@@ -55,6 +62,11 @@ export interface DynamicFormProps<TData extends FieldValues> {
     customStyles?: CustomStyles;
     submitButtonText?: string;
     loadingButtonText?: string;
+    componentRegistry?: Record<string, React.ComponentType<any>>;
+    formId?: string;
+    showSubmitButton?: boolean;
+    TriggerSubmitComponent?: React.ComponentType<{ triggerSubmit: () => void; isBusy: boolean }>;
+
     // ouput settings
     onSuccess?: (data: any) => void;
     onError?: (error: any) => void;
@@ -63,18 +75,24 @@ export interface DynamicFormProps<TData extends FieldValues> {
         apiResponse: any,
         submittedValues: TData
     }) => React.ReactNode;
+    // auto-table settings, data is an Array<any>
     successDataPath?: string;
-    componentRegistry?: Record<string, React.ComponentType<any>>;
-    showResponseDetails?: boolean;
+    // columns on table by fields
     successDataPathFields?: DataPathFieldConfig[];
+    showResponseDetailsHeader?: boolean;
+    showDataTableHeaders?: boolean;
+    showRowNumber?: boolean;
+
+    // row actions
     rowActions?: RowAction[];
     onRowClick?: (rowData: any) => void;
     rowKeyField?: string;
-    onSelectionChange?: (selectedKeys: Set<any>, selectedRows: any[]) => void;
-    tableActions?: TableAction[];
+    initialCheckedField?: string;
     selectOnRowClick?: boolean;
     selectedRowClassName?: string;
-    TriggerSubmitComponent?: React.ComponentType<{ triggerSubmit: () => void; isBusy: boolean }>;
+    onSelectionChange?: (selectedKeys: Set<any>, selectedRows: any[]) => void;
+    // table actions
+    tableActions?: TableAction[];
 }
 
 export function DynamicForm<TData extends FieldValues>({
@@ -89,8 +107,10 @@ export function DynamicForm<TData extends FieldValues>({
                                                            successDataPath = 'result.data',
                                                            renderSuccessContent,
                                                            customStyles = {},
-                                                           componentRegistry,
-                                                           showResponseDetails = false,
+                                                           componentRegistry, 
+                                                           showResponseDetailsHeader = false,
+                                                           showDataTableHeaders = true,
+                                                           showRowNumber = false,
                                                            successDataPathFields,
                                                            rowActions,
                                                            onRowClick,
@@ -101,8 +121,22 @@ export function DynamicForm<TData extends FieldValues>({
                                                            selectedRowClassName,
                                                            dynamicINDataValues,
                                                            TriggerSubmitComponent,
+                                                           formId,
+                                                           showSubmitButton = true,
+                                                           initialCheckedField,
+
                                                        }: DynamicFormProps<TData>) {
-    const {fire, loading: hookLoading, error} = useSubmitHook({fireImmediately: false});
+    const {
+        fire,
+        loading: hookLoading,
+        error,
+        response,
+        dataList,
+        InfiniteLoading,
+        rootRefSetter,
+        handleRootScroll,
+        resetCachedResponseStore,
+    } = useSubmitHook();
     const [isPending, startTransition] = useTransition();
     const [isSaving, setIsSaving] = useAtom(formSavingAtom);
     const isBusy = isPending || hookLoading || isSaving;
@@ -112,10 +146,22 @@ export function DynamicForm<TData extends FieldValues>({
         submittedValues: TData
     } | null>(null);
 
+    useEffect(() => {
+        if (response) {
+            setSuccessState({
+                apiResponse: response,
+                submittedValues: defaultValues ?? {} as TData
+            })
+        }
+    }, [response])
+
     const [dynamicOptions, setDynamicOptions] = useAtom(dynamicOptionsAtom);
     const [fieldLoading, setFieldLoading] = useAtom(fieldLoadingAtom);
     const initialEffectsRan = useRef(false);
     const debounceTimers = useRef<Record<string, NodeJS.Timeout>>({});
+    const initialSelectionDone = useRef(false);
+
+    const [selectedKeys, setSelectedKeys] = useState<Set<any>>(new Set());
 
     const styles: AllStyles = {
         submitButton: "bg-primary text-primary-foreground shadow-xs hover:bg-primary/90 inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium transition-all disabled:pointer-events-none disabled:opacity-50 h-9 px-4 py-2 m-auto",
@@ -137,7 +183,6 @@ export function DynamicForm<TData extends FieldValues>({
     const {
         handleSubmit,
         formState: {errors: formValidationErrors, isSubmitted},
-        reset,
         register,
         watch,
         setValue,
@@ -145,6 +190,62 @@ export function DynamicForm<TData extends FieldValues>({
         trigger,
         control
     } = formMethods;
+
+    const mainData = useMemo(() => {
+        if (dataList.length > 0)
+            return dataList;
+        if (!successState?.apiResponse) return [];
+        const data = successDataPath ? get(successState.apiResponse, successDataPath) : successState.apiResponse;
+        return Array.isArray(data) ? data : [];
+    }, [dataList, successState, successDataPath]);
+
+    useEffect(() => {
+        if (initialSelectionDone.current || !initialCheckedField || !rowKeyField || !selectOnRowClick || mainData.length === 0) {
+            return;
+        }
+
+        const initialKeys = new Set<any>();
+        for (const row of mainData) {
+            const key = get(row, rowKeyField);
+            if (key !== undefined) {
+                const shouldBeSelected = get(row, initialCheckedField);
+                if (shouldBeSelected) {
+                    initialKeys.add(key);
+                }
+            }
+        }
+
+        if (initialKeys.size > 0) {
+            setSelectedKeys(initialKeys);
+            if (onSelectionChange) {
+                const selectedRows = mainData.filter(row => initialKeys.has(get(row, rowKeyField!)));
+                onSelectionChange(initialKeys, selectedRows);
+            }
+            initialSelectionDone.current = true;
+        }
+    }, [mainData, initialCheckedField, rowKeyField, selectOnRowClick, onSelectionChange]);
+
+    const handleSelectionChange = useCallback((row: any, isChecked: boolean) => {
+        if (!rowKeyField) return;
+        const key = get(row, rowKeyField);
+        if (key === undefined) return;
+
+        const newSelectedKeys = new Set(selectedKeys);
+        if (isChecked) {
+            newSelectedKeys.add(key);
+        } else {
+            newSelectedKeys.delete(key);
+        }
+        setSelectedKeys(newSelectedKeys);
+
+        if (onSelectionChange) {
+            const newSelectedRows = mainData.filter(r => {
+                const rKey = get(r, rowKeyField);
+                return rKey !== undefined && newSelectedKeys.has(rKey);
+            });
+            onSelectionChange(newSelectedKeys, newSelectedRows);
+        }
+    }, [selectedKeys, mainData, rowKeyField, onSelectionChange]);
 
     const getVisibleFieldsRecursively = (schema: z.ZodTypeAny): z.ZodTypeAny[] => {
         const unwrapped = getZodInnerType(schema);
@@ -160,7 +261,7 @@ export function DynamicForm<TData extends FieldValues>({
         return [schema];
     }
 
-    const shouldShowSubmitButton = useMemo(() => {
+    const internalShouldShowSubmitButton = useMemo(() => {
         const visibleFields = getVisibleFieldsRecursively(formSchema);
         if (visibleFields.length === 0) return false;
 
@@ -170,6 +271,8 @@ export function DynamicForm<TData extends FieldValues>({
         });
         return !allAreSaveOnChange;
     }, [formSchema]);
+
+    const finalShowSubmitButton = showSubmitButton && internalShouldShowSubmitButton;
 
     const fetchFieldOptions = useCallback(async (targetFieldName: string, fetchConfig: FetchConfig) => {
         setFieldLoading(prev => ({...prev, [targetFieldName]: true}));
@@ -363,11 +466,12 @@ export function DynamicForm<TData extends FieldValues>({
     const handleFormSubmit = (formData: TData) => {
         startTransition(async () => {
             try {
+                resetCachedResponseStore();
                 const processedData = processPassthroughFields(formData);
                 const finalData = { ...dynamicINDataValues, ...processedData };
-                const result = await fire(finalData);
-                onSuccess?.(result);
-                setSuccessState({apiResponse: result, submittedValues: finalData});
+                const apiResponse = await fire(finalData);
+                onSuccess?.(apiResponse);
+                setSuccessState({apiResponse: apiResponse, submittedValues: finalData});
                 // reset(defaultValues);
             } catch (e) {
                 console.error("Form submission caught an error:", e);
@@ -378,6 +482,8 @@ export function DynamicForm<TData extends FieldValues>({
 
     const handleResetForm = () => {
         setSuccessState(null);
+        setSelectedKeys(new Set());
+        initialSelectionDone.current = false;
     };
 
     const renderField = (key: string, schema: z.ZodTypeAny): JSX.Element | null => {
@@ -574,15 +680,16 @@ export function DynamicForm<TData extends FieldValues>({
         return [];
     };
 
+    // console.log({InfiniteLoading})
     return (
         <>
             {TriggerSubmitComponent && <TriggerSubmitComponent triggerSubmit={handleSubmit(handleFormSubmit)} isBusy={isBusy} />}
             <div className={styles.formContainer}>
                 <FormProvider {...formMethods}>
-                    <form onSubmit={handleSubmit(handleFormSubmit)} className={styles.form}>
+                    <form id={formId} onSubmit={handleSubmit(handleFormSubmit)} className={styles.form}>
                         {renderSchema(formSchema)}
 
-                        {shouldShowSubmitButton && (
+                        {finalShowSubmitButton && (
                             <div className="mt-8 flex items-center col-span-full justify-start">
                                 <button type="submit" disabled={isBusy} className={styles.submitButton}>
                                     {isSaving ? 'Saving...' : (isBusy ? loadingButtonText : submitButtonText)}
@@ -600,26 +707,40 @@ export function DynamicForm<TData extends FieldValues>({
                 </FormProvider>
             </div>
             {
-                successState && !error && (
+                successState && (
                     <div className={`${styles.successContainer} mt-8`}>
+                        {error && (
+                            <div
+                                className="p-4 mb-4 text-sm text-red-800 rounded-lg bg-red-50 dark:bg-gray-800 dark:text-red-400"
+                                role="alert">
+                                <span className="font-medium">Request Error:</span> {error.message}
+                            </div>
+                        )}
                         {renderSuccessContent ? (
                             renderSuccessContent(successState)
-                        ) : successState.apiResponse ? (
+                        ) : (dataList.length > 0 || successState.apiResponse) ? (
                             <div className="w-full text-left">
-                                <DataDisplayTable response={successState.apiResponse}
-                                                  dataPath={successDataPath}
+                                <DataDisplayTable response={dataList.length > 0 ? dataList : successState.apiResponse}
+                                                  dataPath={dataList.length > 0 ? undefined : successDataPath}
                                                   dataPathFields={successDataPathFields}
-                                                  showResponseDetails={showResponseDetails}
+                                                  showResponseDetailsHeader={showResponseDetailsHeader}
+                                                  showDataTableHeaders={showDataTableHeaders}
+                                                  showRowNumber={showRowNumber}
                                                   rowActions={rowActions}
                                                   onRowClick={onRowClick}
                                                   rowKeyField={rowKeyField}
-                                                  onSelectionChange={onSelectionChange}
+                                                  onSelectionChange={handleSelectionChange}
                                                   tableActions={tableActions}
                                                   selectOnRowClick={selectOnRowClick}
                                                   selectedRowClassName={selectedRowClassName}
-                                                  componentRegistry={componentRegistry}/>
+                                                  componentRegistry={componentRegistry}
+                                                  selectedKeys={selectedKeys}
+                                                  rootRefSetter={rootRefSetter}
+                                                  handleRootScroll={handleRootScroll}
+                                                  InfiniteLoading={InfiniteLoading}
+                                />
                             </div>
-                        ) : (
+                        ) : !error && (
                             <>
                                 <div className="text-2xl text-green-500 mb-4">✅</div>
                                 <h3 className="text-xl font-semibold text-foreground">Success!</h3>
@@ -635,3 +756,5 @@ export function DynamicForm<TData extends FieldValues>({
         </>
     );
 }
+
+DynamicForm.DataDisplayTable = DataDisplayTable;
