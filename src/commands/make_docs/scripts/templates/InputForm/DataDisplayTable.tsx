@@ -75,8 +75,13 @@ export type RowAction = ({
  * Cấu hình cho một hành động trên toàn bộ bảng (ví dụ: xóa các hàng đã chọn).
  */
 export type TableAction = {
+    key?: string;
     label: string | React.ReactNode;
     className?: string;
+    /** If true, the button will be disabled. */
+    isBusy?: boolean;
+    /** If true, the button will be enabled even if there is no selection. Defaults to false. */
+    ignoreSelection?: boolean;
 } & ({
     onClick: (selectedKeys: Set<any>, selectedRows: any[]) => void;
     useSubmitHook?: never;
@@ -216,8 +221,9 @@ const TableActionButton: React.FC<{
     selection: { selectedKeys: Set<any>, selectedRows: any[] };
     componentRegistry?: Record<string, React.ComponentType<any>>;
 }> = ({action, selection, componentRegistry}) => {
-    const {className, label} = action;
+    const {className, label, isBusy, ignoreSelection} = action;
     const hasSelection = selection.selectedKeys.size > 0;
+    const isEnabled = ignoreSelection || hasSelection;
     const ButtonComponent = componentRegistry?.['button'] as React.ElementType | undefined;
 
     if (action.useSubmitHook) {
@@ -226,14 +232,15 @@ const TableActionButton: React.FC<{
             const dataToSend = action.mapSelection ? action.mapSelection(selection) : selection;
             fire(dataToSend).catch(err => console.error("[TableAction] Submit hook error:", err));
         };
+        const busy = isBusy || loading;
 
         if (ButtonComponent) {
             return <ButtonComponent variant="outline" size="sm" className={className}
-                                    disabled={!hasSelection || loading}
-                                    onClick={handleClick}>{loading ? '...' : label}</ButtonComponent>
+                                    disabled={!isEnabled || busy}
+                                    onClick={handleClick}>{busy ? '...' : label}</ButtonComponent>
         }
-        return <button disabled={!hasSelection || loading} onClick={handleClick}
-                       className={`px-3 py-1 text-sm border rounded-md transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${className || 'bg-white hover:bg-gray-100'}`}>{loading ? '...' : label}</button>
+        return <button disabled={!isEnabled || busy} onClick={handleClick}
+                       className={`px-3 py-1 text-sm border rounded-md transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${className || 'bg-white hover:bg-gray-100'}`}>{busy ? '...' : label}</button>
     }
 
     // Simple onClick
@@ -242,11 +249,11 @@ const TableActionButton: React.FC<{
     };
 
     if (ButtonComponent) {
-        return <ButtonComponent variant="outline" size="sm" className={className} disabled={!hasSelection}
-                                onClick={handleClick}>{label}</ButtonComponent>
+        return <ButtonComponent variant="outline" size="sm" className={className} disabled={!isEnabled || isBusy}
+                                onClick={handleClick}>{isBusy ? '...' : label}</ButtonComponent>
     }
-    return <button disabled={!hasSelection} onClick={handleClick}
-                   className={`px-3 py-1 text-sm border rounded-md transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${className || 'bg-white hover:bg-gray-100'}`}>{label}</button>
+    return <button disabled={!isEnabled || isBusy} onClick={handleClick}
+                   className={`px-3 py-1 text-sm border rounded-md transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${className || 'bg-white hover:bg-gray-100'}`}>{isBusy ? '...' : label}</button>
 };
 
 /**
@@ -640,6 +647,7 @@ export const DataDisplayTable = (
     {
         response,
         dataPath,
+        title,
         dataPathFields,
         showResponseDetailsHeader = false,
         showDataTableHeaders = true,
@@ -659,6 +667,7 @@ export const DataDisplayTable = (
     }: {
         response: any,
         dataPath?: string,
+        title?: string,
         dataPathFields?: DataPathFieldConfig[],
         showResponseDetailsHeader?: boolean,
         showDataTableHeaders?: boolean,
@@ -694,7 +703,7 @@ export const DataDisplayTable = (
         <div className="flex items-center gap-2">
             {tableActions.map((action, index) => (
                 <TableActionButton
-                    key={index}
+                    key={action.key || index}
                     action={action}
                     selection={{selectedKeys, selectedRows}}
                     componentRegistry={componentRegistry}
@@ -708,7 +717,11 @@ export const DataDisplayTable = (
         return (
             <div className="w-full" ref={rootRefSetter} onScroll={handleRootScroll}>
                 <div className="flex justify-between items-center mb-4">
-                    <h3 className="text-xl font-semibold text-foreground">Submission Result</h3>
+                    {title ? (
+                        <h4 className="text-lg font-medium text-foreground">{title}</h4>
+                    ) : (
+                        <div/> /* Placeholder to push toolbar to the right */
+                    )}
                     {tableActionsToolbar}
                 </div>
                 <div className="rounded-lg">
@@ -737,15 +750,15 @@ export const DataDisplayTable = (
     const hasOtherData = Object.keys(otherData).length > 0;
 
     // Tạo tiêu đề dễ đọc cho phần dữ liệu chính
-    const mainDataTitle = startCase(dataPath.split('.').join(' '));
+    const mainDataTitle = title ?? startCase(dataPath.split('.').join(' '));
 
     return (
         <div className="w-full" ref={rootRefSetter} onScroll={handleRootScroll}>
             {showResponseDetailsHeader && (
                 <div className="flex justify-between items-center mb-4">
-                    <h3 className="text-xl font-semibold text-foreground">
-                        Submission Result
-                    </h3>
+                    {/*<h3 className="text-xl font-semibold text-foreground">*/}
+                    {/*    Submission Result*/}
+                    {/*</h3>*/}
                 </div>
             )}
             <div className="space-y-6 rounded-lg overflow-x-auto">

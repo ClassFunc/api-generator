@@ -1,4 +1,3 @@
-// /Users/lethanh/WebstormProjects/audits-web/components/InputForm/InputForm.tsx
 'use client';
 
 import {Controller, FieldValues, FormProvider, Path, useForm} from 'react-hook-form';
@@ -40,6 +39,7 @@ type SubmitHook<TData extends FieldValues> = (defaultConfig?: Record<string, any
     rootRefSetter: (node: HTMLDivElement | null) => void;
     handleRootScroll: () => void;
     resetCachedResponseStore: () => void;
+    endpoint: string | undefined;
 };
 
 type AllStyleKeys =
@@ -70,6 +70,8 @@ export interface DynamicFormProps<TData extends FieldValues> {
     formId?: string;
     showSubmitButton?: boolean;
     TriggerSubmitComponent?: React.ComponentType<{ triggerSubmit: () => void; isBusy: boolean }>;
+    showForm?: boolean;
+    fireImmediately?: boolean;
 
     // ouput settings
     onSuccess?: (data: any) => void;
@@ -79,8 +81,9 @@ export interface DynamicFormProps<TData extends FieldValues> {
         apiResponse: any,
         submittedValues: TData
     }) => React.ReactNode;
-    // auto-table settings, data is an Array<any>
+    // in auto-table settings, data is an Array<any>
     successDataPath?: string;
+    resultTitle?: string;
     // columns on table by fields
     successDataPathFields?: DataPathFieldConfig[];
     showResponseDetailsHeader?: boolean;
@@ -97,6 +100,7 @@ export interface DynamicFormProps<TData extends FieldValues> {
     onSelectionChange?: (selectedKeys: Set<any>, selectedRows: any[]) => void;
     // table actions
     tableActions?: TableAction[];
+    showTableRefreshButton?: boolean;
 }
 
 export function DynamicForm<TData extends FieldValues>({
@@ -105,10 +109,11 @@ export function DynamicForm<TData extends FieldValues>({
                                                            defaultValues,
                                                            onSuccess,
                                                            onError,
-                                                           submitButtonText = 'Send',
-                                                           loadingButtonText = 'Sending...',
+                                                           submitButtonText = 'Submit',
+                                                           loadingButtonText = 'Submitting...',
                                                            successMessage = 'Your submission was successful!',
                                                            successDataPath = 'result.data',
+                                                           resultTitle,
                                                            renderSuccessContent,
                                                            customStyles = {},
                                                            componentRegistry, 
@@ -126,6 +131,9 @@ export function DynamicForm<TData extends FieldValues>({
                                                            dynamicINDataValues,
                                                            TriggerSubmitComponent,
                                                            formId,
+                                                           showForm = true,
+                                                           fireImmediately = false,
+                                                           showTableRefreshButton = true,
                                                            showSubmitButton = true,
                                                            initialCheckedField,
 
@@ -140,7 +148,8 @@ export function DynamicForm<TData extends FieldValues>({
         rootRefSetter,
         handleRootScroll,
         resetCachedResponseStore,
-    } = useSubmitHook({inData: defaultValues, fireImmediately: false} as DefaultConfigs);
+        endpoint,
+    } = useSubmitHook({inData: defaultValues, fireImmediately} as DefaultConfigs);
     const [isPending, startTransition] = useTransition();
     const [isSaving, setIsSaving] = useAtom(formSavingAtom);
     const isBusy = isPending || hookLoading || isSaving;
@@ -194,6 +203,23 @@ export function DynamicForm<TData extends FieldValues>({
         trigger,
         control
     } = formMethods;
+
+    const finalResultTitle = useMemo(() => {
+        if (resultTitle) {
+            return resultTitle;
+        }
+        if (endpoint) {
+            // Lấy phần cuối của URL path, bỏ query params
+            const path = endpoint.split('?')[0];
+            // Tách theo '/', lọc bỏ các phần rỗng (ví dụ: từ // hoặc / ở cuối)
+            const parts = path.split('/').filter(Boolean);
+            // Lấy phần tử cuối cùng
+            const lastPart = parts.pop() || '';
+            // Chuyển thành dạng "Title Case" và trả về
+            return startCase(lastPart);
+        }
+        return undefined;
+    }, [resultTitle, endpoint]);
 
     const mainData = useMemo(() => {
         if (dataList.length > 0)
@@ -371,6 +397,36 @@ export function DynamicForm<TData extends FieldValues>({
             })
             .finally(() => setIsSaving(false));
     }, [trigger, getValues, setIsSaving, fire, onSuccess, dynamicINDataValues, onError]);
+
+    const handleRefresh = useCallback(() => {
+        startTransition(async () => {
+            try {
+                resetCachedResponseStore();
+                const valuesToUse = dynamicINDataValues ?? defaultValues ?? {} as TData;
+                console.log({valuesToUse})
+                const apiResponse = await fire(valuesToUse as TData);
+                onSuccess?.(apiResponse);
+                setSuccessState({apiResponse: apiResponse, submittedValues: valuesToUse as TData});
+            } catch (e) {
+                console.error("Form refresh caught an error:", e);
+                onError?.(e);
+            }
+        });
+    }, [resetCachedResponseStore, successState, defaultValues, fire, onSuccess, onError]);
+
+    const finalTableActions = useMemo(() => {
+        const allActions = [...(tableActions || [])];
+        if (showTableRefreshButton) {
+            allActions.unshift({
+                key: 'refresh',
+                label: 'Refresh',
+                onClick: handleRefresh,
+                ignoreSelection: true,
+                isBusy: isBusy,
+            });
+        }
+        return allActions;
+    }, [tableActions, showTableRefreshButton, handleRefresh, isBusy]);
 
     const runEffectsRecursively = useCallback((
         schema: z.ZodTypeAny,
@@ -688,6 +744,7 @@ export function DynamicForm<TData extends FieldValues>({
     return (
         <>
             {TriggerSubmitComponent && <TriggerSubmitComponent triggerSubmit={handleSubmit(handleFormSubmit)} isBusy={isBusy} />}
+            {showForm && (
             <div className={styles.formContainer}>
                 <FormProvider {...formMethods}>
                     <form id={formId} onSubmit={handleSubmit(handleFormSubmit)} className={styles.form}>
@@ -710,9 +767,10 @@ export function DynamicForm<TData extends FieldValues>({
                     </form>
                 </FormProvider>
             </div>
+            )}
             {
                 successState && (
-                    <div className={`${styles.successContainer} mt-8`}>
+                    <div className={`${styles.successContainer}`}>
                         {error && (
                             <div
                                 className="p-4 mb-4 text-sm text-red-800 rounded-lg bg-red-50 dark:bg-gray-800 dark:text-red-400"
@@ -725,6 +783,7 @@ export function DynamicForm<TData extends FieldValues>({
                         ) : (dataList.length > 0 || successState.apiResponse) ? (
                             <div className="w-full text-left">
                                 <DataDisplayTable response={dataList.length > 0 ? dataList : successState.apiResponse}
+                                                  title={finalResultTitle}
                                                   dataPath={dataList.length > 0 ? undefined : successDataPath}
                                                   dataPathFields={successDataPathFields}
                                                   showResponseDetailsHeader={showResponseDetailsHeader}
@@ -734,7 +793,7 @@ export function DynamicForm<TData extends FieldValues>({
                                                   onRowClick={onRowClick}
                                                   rowKeyField={rowKeyField}
                                                   onSelectionChange={handleSelectionChange}
-                                                  tableActions={tableActions}
+                                                  tableActions={finalTableActions}
                                                   selectOnRowClick={selectOnRowClick}
                                                   selectedRowClassName={selectedRowClassName}
                                                   componentRegistry={componentRegistry}
@@ -751,9 +810,11 @@ export function DynamicForm<TData extends FieldValues>({
                                 <div className={styles.successMessage}>{successMessage}</div>
                             </>
                         )}
+                        {showForm && (
                         <button onClick={handleResetForm} className={styles.resetButton}>
                             Submit another response
                         </button>
+                        )}
                     </div>
                 )
             }
