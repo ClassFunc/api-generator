@@ -88,7 +88,7 @@ type InfiniteScrollConfig = {
     scrollTo?: "bottom" | "top" | "right" | "left";
 }
 
-type FormPropsType = Omit<DynamicFormProps<any>, 'formSchema'>;
+type FormPropsType = Partial<Omit<DynamicFormProps<any>, 'formSchema'>>;
 
 interface Props extends ResultDataInnerComponentProps, ApiConfigParamsProps {
     inData?: INData;
@@ -829,7 +829,7 @@ export const useGreetingPost = (
     }, [cachedDataList, infiniteRootRef, useInfinityScroll]);
 
     const rootRefSetter = useCallback(
-        (node: HTMLDivElement) => {
+        (node: HTMLDivElement | null) => {
             if (!useInfinityScroll || !isReverseScroll)
                 return;
             infiniteRootRef(node);
@@ -890,7 +890,7 @@ export const useGreetingPost = (
             <DynamicForm
                 formSchema={GreetingINData_schema as any}
                 defaultValues={GreetingIN_defaultValues.data}
-                {...{useSubmitHook: useGreetingPost}}
+                useSubmitHook={useGreetingPost as any}
                 componentRegistry={nativeComponentRegistry}
                 {...({...formProps, ...props})}
             />

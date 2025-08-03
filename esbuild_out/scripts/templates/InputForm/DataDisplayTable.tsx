@@ -97,6 +97,7 @@ export type TableAction = {
  */
 export type DataPathFieldConfig = {
     path: string;
+    title?: string | React.ReactNode;
     as?: 'text' | 'image' | 'video' | 'url' | 'checkbox';
     className?: string;
     clickable?: boolean;
@@ -405,14 +406,12 @@ const RecursiveRenderer = (
                                     <th className="p-2 w-4"></th>
                                 )}
                                 {headers.map(headerConfig => (
-                                    <th key={headerConfig.path}
-                                        className={`p-2 text-left font-semibold text-foreground capitalize break-words max-w-[250px] ${headerConfig.className || ''}`}>
-                                        {/* Hiển thị header dễ đọc hơn, thay . và _ bằng khoảng trắng */}
-                                        {headerConfig.path.replace(/_/g, ' ').replace(/\./g, ' ')}
+                                    <th key={headerConfig.path} className={`p-2 text-center font-semibold text-foreground break-words max-w-[250px] ${headerConfig.className || ''}`}>
+                                        {headerConfig.title ?? startCase(headerConfig.path)}
                                     </th>
                                 ))}
                                 {hasActions && (
-                                    <th className="p-2 text-left font-semibold text-foreground">Actions</th>
+                                    <th className="p-2 text-center font-semibold text-foreground">Actions</th>
                                 )}
                             </tr>
                             </thead>
@@ -528,7 +527,7 @@ const RecursiveRenderer = (
                             {showRowNumber && (
                                 <th className="p-2 w-12 text-center font-semibold text-foreground">#</th>
                             )}
-                            <th className="p-2 text-left font-semibold text-foreground">Value</th>
+                            <th className="p-2 text-center font-semibold text-foreground">Value</th>
                         </tr>
                         </thead>
                     )}
