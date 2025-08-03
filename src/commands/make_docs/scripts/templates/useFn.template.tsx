@@ -166,6 +166,7 @@ export const useGreetingPost = (
     const resetGreetingOUTStore = useResetAtom(greetingOUTStoreAtom); // <--- Thêm dòng này
     const [loading, setLoading] = useState<boolean>(false)
     const [error, setError] = useState<ResponseError | Error | null>(null); // <--- THÊM STATE LỖI
+    const [lastFiredInData, setLastFiredInData] = useState<INData | undefined>();
     const prevResponse = usePrevious(response);
 
     const abortControllerRef = useRef<AbortController | null>(null);
@@ -425,6 +426,7 @@ export const useGreetingPost = (
                         logDev("Request aborted during/after reading non-streamed value for inData:", currentCallInData);
                         return;
                     }
+                    setLastFiredInData(currentCallInData);
                     setResponse(v)
                     if (useCachedResponse) {
                         setGreetingOUTStore(pre => (
@@ -438,6 +440,7 @@ export const useGreetingPost = (
                     return v;
                 case 204:
                     logDev("✅ Received 204 No Content for inData:", currentCallInData);
+                    setLastFiredInData(currentCallInData);
                     setResponse(null as any);
                     return null;
                 default:
@@ -782,16 +785,15 @@ export const useGreetingPost = (
             return;
         }
 
-        const newInData = set(
-            _inData || {},
-            nextCursorQuerySetPath || nextCursorPath,
-            nextCursor
+        const newInData = merge( // Sử dụng inData của lần fire cuối cùng, fallback về _inData ban đầu
+            lastFiredInData || _inData || {},
+            set({}, nextCursorQuerySetPath || nextCursorPath, nextCursor)
         );
 
         logDev("Loading more with new inData:", newInData);
         fire(newInData as INData);
 
-    }, [loading, hasMore, nextCursor, _inData, fire]);
+    }, [loading, hasMore, useInfinityScroll, nextCursor, lastFiredInData, _inData, fire, nextCursorQuerySetPath, nextCursorPath]);
 
     const scrollableRootRef = useRef<React.ComponentRef<'div'> | null>(null);
     const lastScrollDistanceToBottomRef = useRef<number>(0);
