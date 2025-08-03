@@ -1,3 +1,4 @@
+// /Users/lethanh/WebstormProjects/audits-web/components/InputForm/InputForm.tsx
 'use client';
 
 import {Controller, FieldValues, FormProvider, Path, useForm} from 'react-hook-form';
@@ -27,7 +28,7 @@ export const fieldLoadingAtom = atom<Record<string, boolean>>({});
 export const formSavingAtom = atom(false);
 
 // --- Types ---
-type SubmitHook<TData extends FieldValues> = () => {
+type SubmitHook<TData extends FieldValues> = (defaultConfig?: Record<string, any>) => {
     fire: (data: TData) => Promise<any>;
     loading: boolean;
     error: Error | null;
@@ -51,7 +52,10 @@ type AllStyleKeys =
     | 'resetButton';
 type AllStyles = { [K in AllStyleKeys]: string };
 type CustomStyles = Partial<AllStyles>;
-
+type DefaultConfigs = {
+    inData?: Record<string, any>;
+    fireImmediately: boolean;
+}
 // --- NÂNG CẤP PROPS ---
 export interface DynamicFormProps<TData extends FieldValues> {
     //input settings
@@ -136,7 +140,7 @@ export function DynamicForm<TData extends FieldValues>({
         rootRefSetter,
         handleRootScroll,
         resetCachedResponseStore,
-    } = useSubmitHook();
+    } = useSubmitHook({inData: defaultValues, fireImmediately: false} as DefaultConfigs);
     const [isPending, startTransition] = useTransition();
     const [isSaving, setIsSaving] = useAtom(formSavingAtom);
     const isBusy = isPending || hookLoading || isSaving;

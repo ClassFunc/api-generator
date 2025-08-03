@@ -88,7 +88,7 @@ type InfiniteScrollConfig = {
     scrollTo?: "bottom" | "top" | "right" | "left";
 }
 
-type FormPropsType = Omit<DynamicFormProps<any>, 'formSchema' | 'useSubmitHook'>;
+type FormPropsType = Omit<DynamicFormProps<any>, 'formSchema'>;
 
 interface Props extends ResultDataInnerComponentProps, ApiConfigParamsProps {
     inData?: INData;
@@ -152,7 +152,7 @@ export const useGreetingPost = (
         dataListConfig = {uniqBy: "id"},
         inDataDebugger = false,
         useForm = false,
-        formProps = {},
+        formProps,
         nextCursorQuerySetPath,
     }: Props
 ) => {
@@ -890,7 +890,7 @@ export const useGreetingPost = (
             <DynamicForm
                 formSchema={GreetingINData_schema as any}
                 defaultValues={GreetingIN_defaultValues.data}
-                useSubmitHook={useGreetingPost as any}
+                {...{useSubmitHook: useGreetingPost}}
                 componentRegistry={nativeComponentRegistry}
                 {...({...formProps, ...props})}
             />
