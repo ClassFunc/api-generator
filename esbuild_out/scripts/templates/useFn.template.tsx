@@ -165,6 +165,7 @@ export const useGreetingPost = (
     const [greetingOUTStore, setGreetingOUTStore] = useAtom(greetingOUTStoreAtom)
     const resetGreetingOUTStore = useResetAtom(greetingOUTStoreAtom); // <--- Thêm dòng này
     const [loading, setLoading] = useState<boolean>(false)
+    const [endpoint, setEndpoint] = useState<string | undefined>();
     const [error, setError] = useState<ResponseError | Error | null>(null); // <--- THÊM STATE LỖI
     const [lastFiredInData, setLastFiredInData] = useState<INData | undefined>();
     const prevResponse = usePrevious(response);
@@ -314,6 +315,7 @@ export const useGreetingPost = (
                 }
             );
 
+            setEndpoint(greetingResponse.raw.url);
             if (abortAble && localSignal?.aborted) {
                 logDev("Request aborted after receiving headers for inData:", currentCallInData);
                 return;
@@ -472,8 +474,10 @@ export const useGreetingPost = (
                     const {response: errorResponse} = e;
                     if (!errorResponse) {
                         errorToast(`Network error or no response:`, e.message);
+                        setEndpoint(undefined);
                         return;
                     }
+                    setEndpoint(errorResponse.url);
                     let errJson = await errorResponse?.json()
                     if (errJson) {
                         setError(errJson);
@@ -910,6 +914,7 @@ export const useGreetingPost = (
         setInData,
         loading,
         error, // <--- EXPORT LỖI RA NGOÀI
+        endpoint,
         api,
         cachedResponseStore: greetingOUTStore,
         resetCachedResponseStore: resetGreetingOUTStore,

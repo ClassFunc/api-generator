@@ -116,7 +116,7 @@ export function DynamicForm<TData extends FieldValues>({
                                                            resultTitle,
                                                            renderSuccessContent,
                                                            customStyles = {},
-                                                           componentRegistry, 
+                                                           componentRegistry,
                                                            showResponseDetailsHeader = false,
                                                            showDataTableHeaders = true,
                                                            showRowNumber = false,
@@ -399,20 +399,23 @@ export function DynamicForm<TData extends FieldValues>({
     }, [trigger, getValues, setIsSaving, fire, onSuccess, dynamicINDataValues, onError]);
 
     const handleRefresh = useCallback(() => {
-        startTransition(async () => {
-            try {
-                resetCachedResponseStore();
-                const valuesToUse = dynamicINDataValues ?? defaultValues ?? {} as TData;
-                console.log({valuesToUse})
-                const apiResponse = await fire(valuesToUse as TData);
-                onSuccess?.(apiResponse);
-                setSuccessState({apiResponse: apiResponse, submittedValues: valuesToUse as TData});
-            } catch (e) {
-                console.error("Form refresh caught an error:", e);
-                onError?.(e);
-            }
+        startTransition(() => {
+            const doRefresh = async () => {
+                try {
+                    resetCachedResponseStore();
+                    const valuesToUse = dynamicINDataValues ?? defaultValues ?? {} as TData;
+                    console.log({valuesToUse})
+                    const apiResponse = await fire(valuesToUse as TData);
+                    onSuccess?.(apiResponse);
+                    setSuccessState({apiResponse: apiResponse, submittedValues: valuesToUse as TData});
+                } catch (e) {
+                    console.error("Form refresh caught an error:", e);
+                    onError?.(e);
+                }
+            };
+            void doRefresh();
         });
-    }, [resetCachedResponseStore, successState, defaultValues, fire, onSuccess, onError]);
+    }, [resetCachedResponseStore, dynamicINDataValues, defaultValues, fire, onSuccess, onError]);
 
     const finalTableActions = useMemo(() => {
         const allActions = [...(tableActions || [])];
@@ -524,19 +527,22 @@ export function DynamicForm<TData extends FieldValues>({
     }, [setDynamicOptions, setFieldLoading]);
 
     const handleFormSubmit = (formData: TData) => {
-        startTransition(async () => {
-            try {
-                resetCachedResponseStore();
-                const processedData = processPassthroughFields(formData);
-                const finalData = { ...dynamicINDataValues, ...processedData };
-                const apiResponse = await fire(finalData);
-                onSuccess?.(apiResponse);
-                setSuccessState({apiResponse: apiResponse, submittedValues: finalData});
-                // reset(defaultValues);
-            } catch (e) {
-                console.error("Form submission caught an error:", e);
-                onError?.(e);
-            }
+        startTransition(() => {
+            const doSubmit = async () => {
+                try {
+                    resetCachedResponseStore();
+                    const processedData = processPassthroughFields(formData);
+                    const finalData = { ...dynamicINDataValues, ...processedData };
+                    const apiResponse = await fire(finalData);
+                    onSuccess?.(apiResponse);
+                    setSuccessState({apiResponse: apiResponse, submittedValues: finalData});
+                    // reset(defaultValues);
+                } catch (e) {
+                    console.error("Form submission caught an error:", e);
+                    onError?.(e);
+                }
+            };
+            void doSubmit();
         });
     };
 
@@ -745,28 +751,28 @@ export function DynamicForm<TData extends FieldValues>({
         <>
             {TriggerSubmitComponent && <TriggerSubmitComponent triggerSubmit={handleSubmit(handleFormSubmit)} isBusy={isBusy} />}
             {showForm && (
-            <div className={styles.formContainer}>
-                <FormProvider {...formMethods}>
-                    <form id={formId} onSubmit={handleSubmit(handleFormSubmit)} className={styles.form}>
-                        {renderSchema(formSchema)}
+                <div className={styles.formContainer}>
+                    <FormProvider {...formMethods}>
+                        <form id={formId} onSubmit={handleSubmit(handleFormSubmit)} className={styles.form}>
+                            {renderSchema(formSchema)}
 
-                        {finalShowSubmitButton && (
-                            <div className="mt-8 flex items-center col-span-full justify-start">
-                                <button type="submit" disabled={isBusy} className={styles.submitButton}>
-                                    {isSaving ? 'Saving...' : (isBusy ? loadingButtonText : submitButtonText)}
-                                </button>
-                                {isSaving && (
-                                    <span className="ml-4 text-sm text-gray-500 animate-pulse">Processing...</span>
-                                )}
-                            </div>
-                        )}
+                            {finalShowSubmitButton && (
+                                <div className="mt-8 flex items-center col-span-full justify-start">
+                                    <button type="submit" disabled={isBusy} className={styles.submitButton}>
+                                        {isSaving ? 'Saving...' : (isBusy ? loadingButtonText : submitButtonText)}
+                                    </button>
+                                    {isSaving && (
+                                        <span className="ml-4 text-sm text-gray-500 animate-pulse">Processing...</span>
+                                    )}
+                                </div>
+                            )}
 
-                        {isSubmitted && !isBusy && !successState && error && (
-                            <p className={`${styles.errorMessage} mt-4`}>{error.message}</p>
-                        )}
-                    </form>
-                </FormProvider>
-            </div>
+                            {isSubmitted && !isBusy && !successState && error && (
+                                <p className={`${styles.errorMessage} mt-4`}>{error.message}</p>
+                            )}
+                        </form>
+                    </FormProvider>
+                </div>
             )}
             {
                 successState && (
@@ -811,9 +817,9 @@ export function DynamicForm<TData extends FieldValues>({
                             </>
                         )}
                         {showForm && (
-                        <button onClick={handleResetForm} className={styles.resetButton}>
-                            Submit another response
-                        </button>
+                            <button onClick={handleResetForm} className={styles.resetButton}>
+                                Submit another response
+                            </button>
                         )}
                     </div>
                 )
