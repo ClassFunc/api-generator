@@ -402,19 +402,22 @@ export function DynamicForm<TData extends FieldValues>({
     }, [trigger, getValues, setIsSaving, fire, onSuccess, dynamicINDataValues, onError]);
 
     const handleRefresh = useCallback(() => {
-        startTransition(async () => {
-            try {
-                resetCachedResponseStore();
-                const valuesToUse = dynamicINDataValues ?? defaultValues ?? {} as TData;
-                console.log({valuesToUse})
-                const apiResponse = await fire(valuesToUse as TData);
-                onSuccess?.(apiResponse);
-                setSuccessState({apiResponse: apiResponse, submittedValues: valuesToUse as TData});
-            } catch (e) {
-                console.error("Form refresh caught an error:", e);
-                onError?.(e);
-            }
-        });
+        startTransition(() => {
+            const doRefresh = async () => {
+                try {
+                    resetCachedResponseStore();
+                    const valuesToUse = dynamicINDataValues ?? defaultValues ?? {} as TData;
+                    console.log({valuesToUse})
+                    const apiResponse = await fire(valuesToUse as TData);
+                    onSuccess?.(apiResponse);
+                    setSuccessState({apiResponse: apiResponse, submittedValues: valuesToUse as TData});
+                } catch (e) {
+                    console.error("Form refresh caught an error:", e);
+                    onError?.(e);
+                }
+            };
+            void doRefresh();
+        })
     }, [resetCachedResponseStore, successState, defaultValues, fire, onSuccess, onError]);
 
     const finalTableActions = useMemo(() => {
@@ -527,20 +530,23 @@ export function DynamicForm<TData extends FieldValues>({
     }, [setDynamicOptions, setFieldLoading]);
 
     const handleFormSubmit = (formData: TData) => {
-        startTransition(async () => {
-            try {
-                resetCachedResponseStore();
-                const processedData = processPassthroughFields(formData);
-                const finalData = { ...dynamicINDataValues, ...processedData };
-                const apiResponse = await fire(finalData);
-                onSuccess?.(apiResponse);
-                setSuccessState({apiResponse: apiResponse, submittedValues: finalData});
-                // reset(defaultValues);
-            } catch (e) {
-                console.error("Form submission caught an error:", e);
-                onError?.(e);
-            }
-        });
+        startTransition(() => {
+            const doSubmit = async () => {
+                try {
+                    resetCachedResponseStore();
+                    const processedData = processPassthroughFields(formData);
+                    const finalData = {...dynamicINDataValues, ...processedData};
+                    const apiResponse = await fire(finalData);
+                    onSuccess?.(apiResponse);
+                    setSuccessState({apiResponse: apiResponse, submittedValues: finalData});
+                    // reset(defaultValues);
+                } catch (e) {
+                    console.error("Form submission caught an error:", e);
+                    onError?.(e);
+                }
+            };
+            void doSubmit();
+        })
     };
 
     const handleResetForm = () => {
