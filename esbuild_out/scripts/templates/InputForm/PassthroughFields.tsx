@@ -16,19 +16,18 @@ export function PassthroughFields({namePrefix}: PassthroughFieldsProps) {
         name,
     });
 
-    // Các lớp CSS cơ bản để style cho thẻ HTML thông thường
-    const inputClasses = "block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm p-2";
-    // const labelClasses = "block text-xs font-medium text-gray-500";
-    const addButtonClasses = "inline-flex items-center rounded-md border border-gray-300 bg-white px-3 py-2 text-sm font-medium leading-4 text-gray-700 shadow-sm hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2";
-    const removeButtonClasses = "inline-flex items-center justify-center rounded-md border border-transparent bg-transparent text-red-600 hover:bg-red-50 h-9 w-9";
+    // Các lớp CSS được cập nhật với các biến thể dark mode
+    const inputClasses = "block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm p-2 dark:bg-gray-700 dark:border-gray-600 dark:placeholder-gray-400 dark:text-white dark:focus:ring-indigo-600 dark:focus:border-indigo-600";
+    const addButtonClasses = "inline-flex items-center rounded-md border border-gray-300 bg-white px-3 py-2 text-sm font-medium leading-4 text-gray-700 shadow-sm hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 dark:bg-gray-700 dark:text-gray-300 dark:border-gray-600 dark:hover:bg-gray-600 dark:focus:ring-offset-gray-800";
+    const removeButtonClasses = "inline-flex items-center justify-center rounded-md border border-transparent bg-transparent text-red-600 hover:bg-red-50 h-9 w-9 dark:text-red-500 dark:hover:bg-red-900/20";
 
     return (
         <div className="col-span-full mt-4 space-y-4">
             {fields.length > 0 && (
-                <label className="text-sm font-medium text-gray-900">Additional Parameters</label>
+                <label className="text-sm font-medium text-gray-900 dark:text-gray-100">Additional Parameters</label>
             )}
             {fields.map((field, index) => (
-                <div key={field.id} className="flex flex-row items-center gap-2 p-2 border rounded-md border-gray-300 shadow-sm">
+                <div key={field.id} className="flex flex-row items-center gap-2 p-2 border rounded-md border-gray-300 shadow-sm dark:border-gray-600">
                     <input
                         id={`${name}.${index}.key`}
                         placeholder="Key"

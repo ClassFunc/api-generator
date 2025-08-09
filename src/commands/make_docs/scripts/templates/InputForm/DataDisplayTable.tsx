@@ -135,7 +135,7 @@ const RowActionButton: React.FC<{
             <button
                 onClick={handleClick}
                 disabled={loading}
-                className={`px-2 py-1 text-xs rounded-md transition-colors disabled:opacity-50 ${className || 'bg-gray-200 hover:bg-gray-300'}`}
+                className={`px-2 py-1 text-xs rounded-md transition-colors disabled:opacity-50 ${className || 'bg-gray-200 hover:bg-gray-300 dark:bg-gray-700 dark:hover:bg-gray-600'}`}
             >
                 {loading ? '...' : label}
             </button>
@@ -158,7 +158,7 @@ const RowActionButton: React.FC<{
     return (
         <button
             onClick={handleClick}
-            className={`px-2 py-1 text-xs rounded-md transition-colors ${className || 'bg-gray-200 hover:bg-gray-300'}`}
+            className={`px-2 py-1 text-xs rounded-md transition-colors ${className || 'bg-gray-200 hover:bg-gray-300 dark:bg-gray-700 dark:hover:bg-gray-600'}`}
         >
             {label}
         </button>
@@ -210,7 +210,7 @@ const RowActionCheckbox: React.FC<{
             type="checkbox"
             {...commonProps}
             onChange={handleChange}
-            className={`h-4 w-4 rounded border-gray-300 text-primary focus:ring-primary ${action.className || ''}`}
+            className={`h-4 w-4 rounded border-gray-300 text-primary focus:ring-primary dark:border-gray-600 dark:bg-gray-700 ${action.className || ''}`}
         />
     );
 };
@@ -240,7 +240,7 @@ const TableActionButton: React.FC<{
                                     onClick={handleClick}>{busy ? '...' : label}</ButtonComponent>
         }
         return <button disabled={!isEnabled || busy} onClick={handleClick}
-                       className={`px-3 py-1 text-sm border rounded-md transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${className || 'bg-white hover:bg-gray-100'}`}>{busy ? '...' : label}</button>
+                       className={`px-3 py-1 text-sm border rounded-md transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${className || 'bg-white hover:bg-gray-100 dark:bg-gray-800 dark:hover:bg-gray-700 dark:border-gray-600'}`}>{busy ? '...' : label}</button>
     }
 
     // Simple onClick
@@ -253,7 +253,7 @@ const TableActionButton: React.FC<{
                                 onClick={handleClick}>{isBusy ? '...' : label}</ButtonComponent>
     }
     return <button disabled={!isEnabled || isBusy} onClick={handleClick}
-                   className={`px-3 py-1 text-sm border rounded-md transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${className || 'bg-white hover:bg-gray-100'}`}>{isBusy ? '...' : label}</button>
+                   className={`px-3 py-1 text-sm border rounded-md transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${className || 'bg-white hover:bg-gray-100 dark:bg-gray-800 dark:hover:bg-gray-700 dark:border-gray-600'}`}>{isBusy ? '...' : label}</button>
 };
 
 /**
@@ -299,7 +299,7 @@ const RecursiveRenderer = (
     }): JSX.Element | null => {
     // --- Các trường hợp cơ bản (điểm dừng của đệ quy) ---
     if (data === null || data === undefined) {
-        return <span className="italic text-gray-500">Not Provided</span>;
+        return <span className="italic text-gray-500 dark:text-gray-400">Not Provided</span>;
     }
 
     const CheckboxComponent = componentRegistry?.['checkbox'] as React.ElementType;
@@ -311,12 +311,13 @@ const RecursiveRenderer = (
                     return <div className="flex justify-center"><CheckboxComponent checked={true} disabled/></div>;
                 }
                 return <div className="flex justify-center"><input type="checkbox" checked={true} disabled
-                                                                   className="h-4 w-4 rounded border-gray-300 text-primary focus:ring-primary"/>
+                                                                   className="h-4 w-4 rounded border-gray-300 text-primary focus:ring-primary dark:border-gray-600"/>
                 </div>;
             }
             return null; // Không hiển thị gì nếu giá trị là false
         }
-        return <span className={`font-medium ${data ? 'text-green-600' : 'text-red-500'}`}>{data ? 'Yes' : 'No'}</span>;
+        return <span
+            className={`font-medium ${data ? 'text-green-600 dark:text-green-400' : 'text-red-500 dark:text-red-400'}`}>{data ? 'Yes' : 'No'}</span>;
     }
 
     if (typeof data !== 'object') {
@@ -346,7 +347,8 @@ const RecursiveRenderer = (
                 content = <video src={data} controls className="max-w-[250px] rounded-md"/>;
             } else if (renderAs === 'url' || (!renderAs && isHttpUrl)) {
                 content = (
-                    <a href={data} target="_blank" rel="noopener noreferrer" className="text-blue-500 hover:underline"
+                    <a href={data} target="_blank" rel="noopener noreferrer"
+                       className="text-blue-500 hover:underline dark:text-blue-400"
                        onClick={(e) => e.stopPropagation()}>
                         {data}
                     </a>
@@ -365,7 +367,7 @@ const RecursiveRenderer = (
         if (clickable && !isLink && data) {
             return (
                 <a href={String(data)} target="_blank" rel="noopener noreferrer"
-                   className="text-blue-500 hover:underline"
+                   className="text-blue-500 hover:underline dark:text-blue-400"
                    onClick={(e) => e.stopPropagation()}>
                     {content}
                 </a>
@@ -378,7 +380,7 @@ const RecursiveRenderer = (
     // --- Trường hợp đệ quy: Array ---
     if (Array.isArray(data)) {
         if (data.length === 0) {
-            return <span className="italic text-gray-500">Empty List</span>;
+            return <span className="italic text-gray-500 dark:text-gray-400">Empty List</span>;
         }
 
         const firstItem = data[0];
@@ -401,11 +403,11 @@ const RecursiveRenderer = (
             const colSpan = (showRowNumber ? 1 : 0) + (selectOnRowClick && rowKeyField ? 1 : 0) + headers.length + (hasActions ? 1 : 0);
 
             return (
-                <div className="border rounded-md bg-muted/20 my-1">
+                <div className="border rounded-md bg-muted/20 my-1 dark:border-gray-700 dark:bg-gray-800/20">
                     <table className="w-full text-sm">
                         {(showDataTableHeaders ?? true) && (
-                            <thead className="bg-muted/40">
-                            <tr className="border-b">
+                            <thead className="bg-muted/40 dark:bg-gray-700/40">
+                            <tr className="border-b dark:border-gray-700">
                                 {showRowNumber && (
                                     <th className="p-2 w-12 text-center font-semibold text-foreground">#</th>
                                 )}
@@ -413,7 +415,8 @@ const RecursiveRenderer = (
                                     <th className="p-2 w-4"></th>
                                 )}
                                 {headers.map(headerConfig => (
-                                    <th key={headerConfig.path} className={`p-2 text-center font-semibold text-foreground break-words max-w-[250px] ${headerConfig.className || ''}`}>
+                                    <th key={headerConfig.path}
+                                        className={`p-2 text-center font-semibold text-foreground break-words max-w-[250px] ${headerConfig.className || ''}`}>
                                         {headerConfig.title ?? startCase(headerConfig.path)}
                                     </th>
                                 ))}
@@ -430,7 +433,7 @@ const RecursiveRenderer = (
 
                             return (
                                 <tr key={index}
-                                    className={`border-b last:border-b-0 hover:bg-muted/30 ${(onRowClick || (selectOnRowClick && rowKeyField)) ? 'cursor-pointer' : ''} ${isSelected ? selectedRowClassName || '' : ''}`}
+                                    className={`border-b last:border-b-0 hover:bg-muted/30 dark:border-gray-700 dark:hover:bg-gray-700/50 ${(onRowClick || (selectOnRowClick && rowKeyField)) ? 'cursor-pointer' : ''} ${isSelected ? selectedRowClassName || '' : ''}`}
                                     onClick={(e) => {
                                         e.stopPropagation();
                                         // Handle selection toggle if enabled
@@ -450,26 +453,26 @@ const RecursiveRenderer = (
                                         <td className="p-2 align-middle text-center text-muted-foreground">{index + 1}</td>
                                     )}
                                     {selectOnRowClick && rowKeyField && (
-                                    <td className="p-2 align-middle text-center">
-                                        <div className="flex justify-center">
-                                            {CheckboxComponent ? (
-                                                <CheckboxComponent
-                                                    checked={isSelected}
-                                                    onCheckedChange={(checked: boolean) => onSelectionChange?.(item, checked)}
-                                                    onClick={(e: React.MouseEvent) => e.stopPropagation()}
-                                                />
-                                            ) : (
-                                                <input
-                                                    type="checkbox"
-                                                    checked={isSelected}
-                                                    onChange={(e) => onSelectionChange?.(item, e.target.checked)}
-                                                    onClick={(e) => e.stopPropagation()}
-                                                    className="h-4 w-4 rounded border-gray-300 text-primary focus:ring-primary"
-                                                />
-                                            )}
-                                        </div>
-                                    </td>
-                                )}
+                                        <td className="p-2 align-middle text-center">
+                                            <div className="flex justify-center">
+                                                {CheckboxComponent ? (
+                                                    <CheckboxComponent
+                                                        checked={isSelected}
+                                                        onCheckedChange={(checked: boolean) => onSelectionChange?.(item, checked)}
+                                                        onClick={(e: React.MouseEvent) => e.stopPropagation()}
+                                                    />
+                                                ) : (
+                                                    <input
+                                                        type="checkbox"
+                                                        checked={isSelected}
+                                                        onChange={(e) => onSelectionChange?.(item, e.target.checked)}
+                                                        onClick={(e) => e.stopPropagation()}
+                                                        className="h-4 w-4 rounded border-gray-300 text-primary focus:ring-primary dark:border-gray-600 dark:bg-gray-700"
+                                                    />
+                                                )}
+                                            </div>
+                                        </td>
+                                    )}
                                     {headers.map(headerConfig => (
                                         <td key={headerConfig.path}
                                             className={`p-2 align-middle text-center text-muted-foreground break-words max-w-[250px] ${headerConfig.as !== 'image' ? headerConfig.className || '' : ''}`}>
@@ -515,7 +518,7 @@ const RecursiveRenderer = (
                         })}
                         {InfiniteLoading && (
                             <tr>
-                                <td colSpan={colSpan} className="p-0"><InfiniteLoading /></td>
+                                <td colSpan={colSpan} className="p-0"><InfiniteLoading/></td>
                             </tr>
                         )}
                         </tbody>
@@ -526,11 +529,11 @@ const RecursiveRenderer = (
 
         // Nếu là mảng các giá trị đơn, tạo bảng một cột
         return (
-            <div className="border rounded-md bg-muted/20 my-1">
+            <div className="border rounded-md bg-muted/20 my-1 dark:border-gray-700 dark:bg-gray-800/20">
                 <table className="w-full text-sm">
                     {(showDataTableHeaders ?? true) && (
-                        <thead className="bg-muted/40">
-                        <tr className="border-b">
+                        <thead className="bg-muted/40 dark:bg-gray-700/40">
+                        <tr className="border-b dark:border-gray-700">
                             {showRowNumber && (
                                 <th className="p-2 w-12 text-center font-semibold text-foreground">#</th>
                             )}
@@ -541,7 +544,7 @@ const RecursiveRenderer = (
                     <tbody>
                     {data.map((item, index) => (
                         <tr key={index}
-                            className={`border-b last:border-b-0 hover:bg-muted/30 ${onRowClick ? 'cursor-pointer' : ''}`}
+                            className={`border-b last:border-b-0 hover:bg-muted/30 dark:border-gray-700 dark:hover:bg-gray-700/50 ${onRowClick ? 'cursor-pointer' : ''}`}
                             onClick={(e) => {
                                 // Selection on row click is not supported for simple arrays as they lack a stable key.
                                 // However, the onRowClick prop is still supported.
@@ -563,7 +566,7 @@ const RecursiveRenderer = (
                     ))}
                     {InfiniteLoading && (
                         <tr>
-                            <td colSpan={showRowNumber ? 2 : 1} className="p-0"><InfiniteLoading /></td>
+                            <td colSpan={showRowNumber ? 2 : 1} className="p-0"><InfiniteLoading/></td>
                         </tr>
                     )}
                     </tbody>
@@ -575,11 +578,11 @@ const RecursiveRenderer = (
 
     // --- Trường hợp đệ quy: Object ---
     if (Object.keys(data).length === 0) {
-        return <span className="italic text-gray-500">Empty Object</span>;
+        return <span className="italic text-gray-500 dark:text-gray-400">Empty Object</span>;
     }
 
     return (
-        <div className="border rounded-md bg-muted/20 my-1">
+        <div className="border rounded-md bg-muted/20 my-1 dark:border-gray-700 dark:bg-gray-800/20">
             <table className="w-full text-sm align-top">
                 <tbody>
                 {Object.entries(data)
@@ -606,7 +609,7 @@ const RecursiveRenderer = (
 
                         return (
                             <tr key={key}
-                                className={`border-b last:border-b-0 hover:bg-muted/30 ${onRowClick ? 'cursor-pointer' : ''}`}
+                                className={`border-b last:border-b-0 hover:bg-muted/30 dark:border-gray-700 dark:hover:bg-gray-700/50 ${onRowClick ? 'cursor-pointer' : ''}`}
                                 onClick={(e) => {
                                     // Selection on row click is not supported for object key-value pairs.
                                     // The onRowClick prop is still supported.
@@ -765,7 +768,8 @@ export const DataDisplayTable = (
                 {/* Hiển thị các thông tin phụ của response */}
                 {showResponseDetailsHeader && hasOtherData && (
                     <div>
-                        <h4 className="text-lg font-medium text-foreground mb-2 pb-2 border-b">Response Details</h4>
+                        <h4 className="text-lg font-medium text-foreground mb-2 pb-2 border-b dark:border-gray-700">Response
+                            Details</h4>
                         {/* Actions không áp dụng cho phần details phụ */}
                         <RecursiveRenderer data={otherData} onRowClick={onRowClick}
                                            componentRegistry={componentRegistry}
@@ -777,7 +781,7 @@ export const DataDisplayTable = (
                 {/* Hiển thị dữ liệu chính nếu có */}
                 {mainData !== undefined && (
                     <div>
-                        <div className="flex justify-between items-center mb-2 pb-2 border-b">
+                        <div className="flex justify-between items-center mb-2 pb-2 border-b dark:border-gray-700">
                             <h4 className="text-lg font-medium text-foreground">{mainDataTitle}</h4>
                             <div className="flex items-center gap-4">
                                 {tableActionsToolbar}
