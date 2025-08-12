@@ -380,6 +380,50 @@ const RecursiveRenderer = (
     // --- Trường hợp đệ quy: Array ---
     if (Array.isArray(data)) {
         if (data.length === 0) {
+            if (dataPathFields && dataPathFields.length > 0) {
+                const hasActions = rowActions && rowActions.length > 0;
+                const colSpan = (showRowNumber ? 1 : 0) + (selectOnRowClick && rowKeyField ? 1 : 0) + dataPathFields.length + (hasActions ? 1 : 0);
+
+                return (
+                    <div className="border rounded-md bg-muted/20 my-1 dark:border-gray-700 dark:bg-gray-800/20">
+                        <table className="w-full text-sm">
+                            {(showDataTableHeaders ?? true) && (
+                                <thead className="bg-muted/40 dark:bg-gray-700/40">
+                                <tr className="border-b dark:border-gray-700">
+                                    {showRowNumber && (
+                                        <th className="p-2 w-12 text-center font-semibold text-foreground">#</th>
+                                    )}
+                                    {selectOnRowClick && rowKeyField && (
+                                        <th className="p-2 w-4"></th>
+                                    )}
+                                    {dataPathFields.map(headerConfig => (
+                                        <th key={headerConfig.path}
+                                            className={`p-2 text-center font-semibold text-foreground break-words max-w-[250px] ${headerConfig.className || ''}`}>
+                                            {headerConfig.title ?? startCase(headerConfig.path)}
+                                        </th>
+                                    ))}
+                                    {hasActions && (
+                                        <th className="p-2 text-center font-semibold text-foreground">Actions</th>
+                                    )}
+                                </tr>
+                                </thead>
+                            )}
+                            <tbody>
+                            <tr>
+                                <td colSpan={colSpan} className="p-4 text-center italic text-gray-500 dark:text-gray-400">
+                                    No data available
+                                </td>
+                            </tr>
+                            {InfiniteLoading && (
+                                <tr>
+                                    <td colSpan={colSpan} className="p-0"><InfiniteLoading/></td>
+                                </tr>
+                            )}
+                            </tbody>
+                        </table>
+                    </div>
+                );
+            }
             return <span className="italic text-gray-500 dark:text-gray-400">Empty List</span>;
         }
 
@@ -728,7 +772,7 @@ export const DataDisplayTable = (
                     {tableActionsToolbar}
                 </div>
                 <div className="rounded-lg">
-                    <RecursiveRenderer data={response}
+                    <RecursiveRenderer data={response ?? []}
                                        dataPathFields={dataPathFields}
                                        onRowClick={onRowClick}
                                        rowActions={rowActions}
@@ -779,7 +823,7 @@ export const DataDisplayTable = (
                 )}
 
                 {/* Hiển thị dữ liệu chính nếu có */}
-                {mainData !== undefined && (
+                {(mainData !== undefined || (dataPath && dataPathFields && dataPathFields.length > 0)) && (
                     <div>
                         <div className="flex justify-between items-center mb-2 pb-2 border-b dark:border-gray-700">
                             <h4 className="text-lg font-medium text-foreground">{mainDataTitle}</h4>
@@ -787,7 +831,7 @@ export const DataDisplayTable = (
                                 {tableActionsToolbar}
                             </div>
                         </div>
-                        <RecursiveRenderer data={mainData}
+                        <RecursiveRenderer data={mainData ?? []}
                                            dataPathFields={dataPathFields}
                                            onRowClick={onRowClick}
                                            rowActions={rowActions}
