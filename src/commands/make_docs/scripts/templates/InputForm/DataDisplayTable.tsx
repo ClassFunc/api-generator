@@ -103,7 +103,7 @@ export type TableAction = {
 export type DataPathFieldConfig = {
     path: string;
     title?: string | React.ReactNode;
-    as?: 'text' | 'image' | 'video' | 'url' | 'checkbox';
+    as?: 'text' | 'image' | 'video' | 'url' | 'checkbox' | string;
     className?: string;
     clickable?: boolean;
 };

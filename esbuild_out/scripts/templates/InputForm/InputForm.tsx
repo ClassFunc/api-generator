@@ -749,84 +749,133 @@ export function DynamicForm<TData extends FieldValues>({
         return [];
     };
 
-    // console.log({InfiniteLoading})
+    const renderOutput = () => {
+        // Priority 1: Custom success content renderer. It takes precedence over all other outputs
+        // once a successful submission has occurred.
+        if (successState && !error && renderSuccessContent) {
+            return (
+                <div className={`${styles.successContainer}`}>
+                    {renderSuccessContent(successState)}
+                    {showForm && (
+                        <button onClick={handleResetForm} className={styles.resetButton}>
+                            Submit another response
+                        </button>
+                    )}
+                </div>
+            );
+        }
+
+        // Priority 2: Table view. This is the default for query-like forms.
+        // It will render from the start if successDataPathFields are provided.
+        const shouldShowTable = successDataPathFields && successDataPathFields.length > 0;
+        if (shouldShowTable) {
+            const tableResponseData = dataList.length > 0 ? dataList : successState?.apiResponse;
+            return (
+                <div className={`w-full text-left ${showForm ? 'mt-6' : ''}`}>
+                    {/* Display hook error whenever it exists. It shows above the table. */}
+                    {error && (
+                         <div
+                            className="p-4 mb-4 text-sm text-red-800 rounded-lg bg-red-50 dark:bg-gray-800 dark:text-red-400"
+                            role="alert">
+                            <span className="font-medium">Request Error:</span> {error.message}
+                        </div>
+                    )}
+                    <DataDisplayTable
+                        response={tableResponseData ?? []}
+                        title={finalResultTitle}
+                        dataPath={dataList.length > 0 ? undefined : successDataPath}
+                        dataPathFields={successDataPathFields}
+                        showResponseDetailsHeader={showResponseDetailsHeader}
+                        showDataTableHeaders={showDataTableHeaders}
+                        showRowNumber={showRowNumber}
+                        rowActions={rowActions}
+                        onRowClick={onRowClick}
+                        rowKeyField={rowKeyField}
+                        onSelectionChange={handleSelectionChange}
+                        tableActions={finalTableActions}
+                        selectOnRowClick={selectOnRowClick}
+                        selectedRowClassName={selectedRowClassName}
+                        componentRegistry={componentRegistry}
+                        selectedKeys={selectedKeys}
+                        rootRefSetter={rootRefSetter}
+                        handleRootScroll={handleRootScroll}
+                        InfiniteLoading={InfiniteLoading}
+                    />
+                    {/* Show reset button only after a submission has occurred */}
+                    {successState && showForm && (
+                        <div className="text-center mt-6">
+                             <button onClick={handleResetForm} className={styles.resetButton}>
+                                Submit another response
+                            </button>
+                        </div>
+                    )}
+                </div>
+            );
+        }
+
+        // Priority 3: Fallback for non-table, non-custom views after a submission attempt.
+        if (successState) {
+            if (error) {
+                 return (
+                    <div className={`${styles.successContainer}`}>
+                        <div className="p-4 mb-4 text-sm text-red-800 rounded-lg bg-red-50 dark:bg-gray-800 dark:text-red-400" role="alert">
+                            <span className="font-medium">Request Error:</span> {error.message}
+                        </div>
+                        {showForm && (
+                            <button onClick={handleResetForm} className={styles.resetButton}>
+                                Submit another response
+                            </button>
+                        )}
+                    </div>
+                );
+            }
+            // Simple success message
+            return (
+                 <div className={`${styles.successContainer}`}>
+                    <div className="text-2xl text-green-500 dark:text-green-400 mb-4">✅</div>
+                    <h3 className="text-xl font-semibold text-foreground">Success!</h3>
+                    <div className={styles.successMessage}>{successMessage}</div>
+                    {showForm && (
+                        <button onClick={handleResetForm} className={styles.resetButton}>
+                            Submit another response
+                        </button>
+                    )}
+                </div>
+            );
+        }
+
+        // Initially, if no other conditions are met, render nothing.
+        return null;
+    };
+
     return (
         <>
             {TriggerSubmitComponent && <TriggerSubmitComponent triggerSubmit={handleSubmit(handleFormSubmit)} isBusy={isBusy} />}
             {showForm && (
-            <div className={styles.formContainer}>
-                <FormProvider {...formMethods}>
-                    <form id={formId} onSubmit={handleSubmit(handleFormSubmit)} className={styles.form}>
-                        {renderSchema(formSchema)}
+                <div className={styles.formContainer}>
+                    <FormProvider {...formMethods}>
+                        <form id={formId} onSubmit={handleSubmit(handleFormSubmit)} className={styles.form}>
+                            {renderSchema(formSchema)}
 
-                        {finalShowSubmitButton && (
-                            <div className="mt-8 flex items-center col-span-full justify-start">
-                                <button type="submit" disabled={isBusy} className={styles.submitButton}>
-                                    {isSaving ? 'Saving...' : (isBusy ? loadingButtonText : submitButtonText)}
-                                </button>
-                                {isSaving && (
-                                    <span className="ml-4 text-sm text-gray-500 animate-pulse">Processing...</span>
-                                )}
-                            </div>
-                        )}
+                            {finalShowSubmitButton && (
+                                <div className="mt-8 flex items-center col-span-full justify-start">
+                                    <button type="submit" disabled={isBusy} className={styles.submitButton}>
+                                        {isSaving ? 'Saving...' : (isBusy ? loadingButtonText : submitButtonText)}
+                                    </button>
+                                    {isSaving && (
+                                        <span className="ml-4 text-sm text-gray-500 animate-pulse">Processing...</span>
+                                    )}
+                                </div>
+                            )}
 
-                        {isSubmitted && !isBusy && !successState && error && (
-                            <p className={`${styles.errorMessage} mt-4`}>{error.message}</p>
-                        )}
-                    </form>
-                </FormProvider>
-            </div>
+                            {isSubmitted && !isBusy && !successState && error && (
+                                <p className={`${styles.errorMessage} mt-4`}>{error.message}</p>
+                            )}
+                        </form>
+                    </FormProvider>
+                </div>
             )}
-            {
-                successState && (
-                    <div className={`${styles.successContainer}`}>
-                        {error && (
-                            <div
-                                className="p-4 mb-4 text-sm text-red-800 rounded-lg bg-red-50 dark:bg-gray-800 dark:text-red-400"
-                                role="alert">
-                                <span className="font-medium">Request Error:</span> {error.message}
-                            </div>
-                        )}
-                        {renderSuccessContent ? (
-                            renderSuccessContent(successState)
-                        ) : (dataList.length > 0 || successState.apiResponse) ? (
-                            <div className="w-full text-left">
-                                <DataDisplayTable response={dataList.length > 0 ? dataList : successState.apiResponse}
-                                                  title={finalResultTitle}
-                                                  dataPath={dataList.length > 0 ? undefined : successDataPath}
-                                                  dataPathFields={successDataPathFields}
-                                                  showResponseDetailsHeader={showResponseDetailsHeader}
-                                                  showDataTableHeaders={showDataTableHeaders}
-                                                  showRowNumber={showRowNumber}
-                                                  rowActions={rowActions}
-                                                  onRowClick={onRowClick}
-                                                  rowKeyField={rowKeyField}
-                                                  onSelectionChange={handleSelectionChange}
-                                                  tableActions={finalTableActions}
-                                                  selectOnRowClick={selectOnRowClick}
-                                                  selectedRowClassName={selectedRowClassName}
-                                                  componentRegistry={componentRegistry}
-                                                  selectedKeys={selectedKeys}
-                                                  rootRefSetter={rootRefSetter}
-                                                  handleRootScroll={handleRootScroll}
-                                                  InfiniteLoading={InfiniteLoading}
-                                />
-                            </div>
-                        ) : !error && (
-                            <>
-                                <div className="text-2xl text-green-500 dark:text-green-400 mb-4">✅</div>
-                                <h3 className="text-xl font-semibold text-foreground">Success!</h3>
-                                <div className={styles.successMessage}>{successMessage}</div>
-                            </>
-                        )}
-                        {showForm && (
-                        <button onClick={handleResetForm} className={styles.resetButton}>
-                            Submit another response
-                        </button>
-                        )}
-                    </div>
-                )
-            }
+            {renderOutput()}
         </>
     );
 }
