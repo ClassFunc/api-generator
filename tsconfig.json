@@ -10,12 +10,17 @@
   ],
   "compilerOptions": {
     "baseUrl": ".",
+    "target": "ES2017",
+    "lib": [
+      "dom",
+      "dom.iterable",
+      "esnext"
+    ],
     "module": "commonjs",
     "noImplicitReturns": true,
     "outDir": "lib",
     "sourceMap": true,
     "strict": true,
-    "target": "es2017",
     "skipLibCheck": true,
     "esModuleInterop": true,
     "paths": {

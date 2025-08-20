@@ -1,7 +1,7 @@
 import React, {useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState} from "react";
 // @ts-ignore
 import useGreetingApi from "./useGreetingApi"
-import {filter, flatten, get, isEqual, isObject, isPlainObject, Many, merge, omit, orderBy, uniqBy} from 'lodash'
+import {filter, flatten, get, isEqual, isObject, isPlainObject, Many, merge, omit, orderBy, set, uniqBy} from 'lodash'
 // @ts-ignore
 import {GreetingIN, GreetingOUT, ResponseError} from "../"
 import {atom, useAtom, useAtomValue} from "jotai";
@@ -20,27 +20,49 @@ import {
 import {InfinityScrollHereComponent, InfinityScrollHereProps} from "./InfinityScrollHereComponent";
 import useInfiniteScroll from "react-infinite-scroll-hook";
 import {InfinityLoading} from "./InfinityLoading";
+import {DynamicForm, DynamicFormProps} from "./InputForm/InputForm"
 
-type INData = Unpacked<GreetingIN['data']>
+// @ts-ignore
+import {GreetingIN_defaultValues, GreetingINData_schema} from "../zodSchemas/Greeting_schema";
+import {nativeComponentRegistry} from "./InputForm/nativeComponentRegistry";
+/*
+INData = IN['data'] = Map<string,any> | any
+* */
+type INData = GreetingIN['data']
+
+/*
+OUT = {result: Result}
+* */
 type OUT = GreetingOUT;
-type OUTResult = Unpacked<GreetingOUT['result']>
+
+/*
+Result = OUT['result'] = {count, length, data: any|Item[], pageToken,...}
+* */
+type OUTResult = GreetingOUT['result']
 type Result = OUTResult;
 
+/*
+Data = OUT['result']['data'|'docs'] = Array<Item> | any;
+* */
 export type OUTResultMaybeData = OUTResult extends { data: infer U }
     ? U :
     OUTResult extends { docs: infer U2 }
         ? U2
-        : unknown;
+        : any;
 
-export type OUTResultMaybeDataItem = Unpacked<OUTResultMaybeData>
 type Data = OUTResultMaybeData;
-export type Item = OUTResultMaybeDataItem;
 
-function valueOfOUTResultMaybeData(result: unknown): OUTResultMaybeData | OUTResult | null {
+function valueOfData(result: unknown): OUTResultMaybeData | OUTResult | null {
     if (!result)
         return null;
-    return (isPlainObject(result) && get(result, "data")) ? get(result, 'data')! as OUTResultMaybeData : result as OUTResult
+    return get(result, "data") || get(result, "docs") || null
 }
+
+/*
+Item = Unpacked<Data> = any
+* */
+export type OUTResultMaybeDataItem = Unpacked<Data>
+export type Item = OUTResultMaybeDataItem;
 
 interface ResultDataInnerComponentProps {
     mainClassName?: string;
@@ -66,6 +88,8 @@ type InfiniteScrollConfig = {
     scrollTo?: "bottom" | "top" | "right" | "left";
 }
 
+type FormPropsType = Partial<Omit<DynamicFormProps<any>, 'formSchema'>>;
+
 interface Props extends ResultDataInnerComponentProps, ApiConfigParamsProps {
     inData?: INData;
     stream?: boolean;
@@ -79,8 +103,9 @@ interface Props extends ResultDataInnerComponentProps, ApiConfigParamsProps {
         fn: (item: any) => boolean;
     };
     abortAble?: boolean;
-    hasMorePath?: keyof Result | string;
+    hasMorePath?: keyof Result | string | ((result: any) => boolean);
     nextCursorPath?: keyof Result | string;
+    nextCursorQuerySetPath?: string;
     countPath?: keyof Result | string;
     dataPath?: keyof Result | string;
     cachedDataListFilter?: string | Record<string, any>;
@@ -88,6 +113,8 @@ interface Props extends ResultDataInnerComponentProps, ApiConfigParamsProps {
     infiniteScrollConfig?: InfiniteScrollConfig;
     dataListConfig?: DataListConfig;
     inDataDebugger?: boolean;
+    useForm?: boolean;
+    formProps?: FormPropsType;
 }
 
 type IGreetingResponseAtom = Record<string, GreetingOUT>;
@@ -124,20 +151,23 @@ export const useGreetingPost = (
         infiniteScrollConfig,
         dataListConfig = {uniqBy: "id"},
         inDataDebugger = false,
+        useForm = false,
+        formProps,
+        nextCursorQuerySetPath,
     }: Props
 ) => {
     const {api} = useGreetingApi(apiConfigParams, apiConfigOptions);
     const [_inData, setInData] = useAtom<INData | undefined>(useDeepCompareMemo(() => atom(inData), [inData]));
     // @ts-ignore
     const [response, setResponse] = useAtom<GreetingOUT>(lastGreetingOUTAtom)
-    // @ts-ignore
     const resetResponse = useResetAtom(lastGreetingOUTAtom)
     const [streamResponseStore, setStreamResponseStore] = useState<any[]>([])
     const [greetingOUTStore, setGreetingOUTStore] = useAtom(greetingOUTStoreAtom)
-    // @ts-ignore
     const resetGreetingOUTStore = useResetAtom(greetingOUTStoreAtom); // <--- Thêm dòng này
     const [loading, setLoading] = useState<boolean>(false)
+    const [endpoint, setEndpoint] = useState<string | undefined>();
     const [error, setError] = useState<ResponseError | Error | null>(null); // <--- THÊM STATE LỖI
+    const [lastFiredInData, setLastFiredInData] = useState<INData | undefined>();
     const prevResponse = usePrevious(response);
 
     const abortControllerRef = useRef<AbortController | null>(null);
@@ -285,6 +315,7 @@ export const useGreetingPost = (
                 }
             );
 
+            setEndpoint(greetingResponse.raw.url);
             if (abortAble && localSignal?.aborted) {
                 logDev("Request aborted after receiving headers for inData:", currentCallInData);
                 return;
@@ -334,7 +365,7 @@ export const useGreetingPost = (
                                         setStreamResponseStore(prev => [...prev, j])
                                     } catch (e: any) {
                                         const lastChunks = chunkText.split(/\r\n|\n|\r/g)
-                                        logDev({lastChunks})
+                                        // logDev({lastChunks})
                                         for (let c of lastChunks) {
                                             c = c.trim();
                                             if (!c) {
@@ -397,6 +428,7 @@ export const useGreetingPost = (
                         logDev("Request aborted during/after reading non-streamed value for inData:", currentCallInData);
                         return;
                     }
+                    setLastFiredInData(currentCallInData);
                     setResponse(v)
                     if (useCachedResponse) {
                         setGreetingOUTStore(pre => (
@@ -410,6 +442,7 @@ export const useGreetingPost = (
                     return v;
                 case 204:
                     logDev("✅ Received 204 No Content for inData:", currentCallInData);
+                    setLastFiredInData(currentCallInData);
                     setResponse(null as any);
                     return null;
                 default:
@@ -441,8 +474,10 @@ export const useGreetingPost = (
                     const {response: errorResponse} = e;
                     if (!errorResponse) {
                         errorToast(`Network error or no response:`, e.message);
+                        setEndpoint(undefined);
                         return;
                     }
+                    setEndpoint(errorResponse.url);
                     let errJson = await errorResponse?.json()
                     if (errJson) {
                         setError(errJson);
@@ -477,7 +512,7 @@ export const useGreetingPost = (
                 if (abortControllerRef.current === localAbortController) {
                     abortControllerRef.current = null;
                     activeRequestInDataRef.current = null;
-                    logDev("Cleared global abort refs for inData:", currentCallInData);
+                    logDev("--- Cleared global abort refs for inData ---", /*currentCallInData*/);
                 } else {
                     logDev("Global abort refs were for a different/newer request. Not clearing for inData:", currentCallInData);
                 }
@@ -528,7 +563,7 @@ export const useGreetingPost = (
             if (!CustomDataComponent)
                 return null;
 
-            const data = valueOfOUTResultMaybeData(response?.result);
+            const data = valueOfData(response?.result);
 
             if (loading && !data)
                 return LoadingComponent ? <LoadingComponent/> : <div>loading...</div>;
@@ -546,7 +581,7 @@ export const useGreetingPost = (
             if (!CustomDataItemComponent)
                 return null;
 
-            const data = valueOfOUTResultMaybeData(response?.result);
+            const data = valueOfData(response?.result);
 
             if (loading && !data)
                 return LoadingComponent ? <LoadingComponent/> : <div>loading...</div>;
@@ -615,7 +650,7 @@ export const useGreetingPost = (
     const result = useMemo(() => {
         if (!response)
             return null;
-        return response.result as unknown as Result;
+        return response?.result ?? response as unknown as Result;
     }, [response])
 
     const getDataFn = (response?: OUT, dataPath?: keyof Result | string, defaultValues: any = null) => {
@@ -637,6 +672,9 @@ export const useGreetingPost = (
     const hasMore = useMemo(() => {
         if (!result || !hasMorePath || !isObject(result))
             return false;
+        if (typeof hasMorePath === 'function') {
+            return hasMorePath(result)
+        }
         if (hasMorePath && hasMorePath in result) {
             return get(result, hasMorePath, false)
         }
@@ -751,17 +789,15 @@ export const useGreetingPost = (
             return;
         }
 
-        const newInData = merge(
-            _inData,
-            {
-                [nextCursorPath]: nextCursor
-            },
+        const newInData = merge( // Sử dụng inData của lần fire cuối cùng, fallback về _inData ban đầu
+            lastFiredInData || _inData || {},
+            set({}, nextCursorQuerySetPath || nextCursorPath, nextCursor)
         );
 
         logDev("Loading more with new inData:", newInData);
         fire(newInData as INData);
 
-    }, [loading, hasMore, nextCursor, _inData, fire]);
+    }, [loading, hasMore, useInfinityScroll, nextCursor, lastFiredInData, _inData, fire, nextCursorQuerySetPath, nextCursorPath]);
 
     const scrollableRootRef = useRef<React.ComponentRef<'div'> | null>(null);
     const lastScrollDistanceToBottomRef = useRef<number>(0);
@@ -797,7 +833,7 @@ export const useGreetingPost = (
     }, [cachedDataList, infiniteRootRef, useInfinityScroll]);
 
     const rootRefSetter = useCallback(
-        (node: HTMLDivElement) => {
+        (node: HTMLDivElement | null) => {
             if (!useInfinityScroll || !isReverseScroll)
                 return;
             infiniteRootRef(node);
@@ -849,6 +885,23 @@ export const useGreetingPost = (
 
     /* END Scroll Region */
 
+    /* START form*/
+    const Form = useCallback((props: FormPropsType) => {
+        if (!useForm)
+            return;
+
+        return (
+            <DynamicForm
+                formSchema={GreetingINData_schema as any}
+                defaultValues={GreetingIN_defaultValues.data}
+                useSubmitHook={useGreetingPost as any}
+                componentRegistry={nativeComponentRegistry}
+                {...({...formProps, ...props})}
+            />
+        )
+    }, [useForm])
+    /* END form*/
+
     return {
         response,
         responseSWR,
@@ -861,6 +914,7 @@ export const useGreetingPost = (
         setInData,
         loading,
         error, // <--- EXPORT LỖI RA NGOÀI
+        endpoint,
         api,
         cachedResponseStore: greetingOUTStore,
         resetCachedResponseStore: resetGreetingOUTStore,
@@ -885,5 +939,6 @@ export const useGreetingPost = (
         rootRefSetter,
         scrollableRootRef,
         handleRootScroll,
+        Form,
     }
 }

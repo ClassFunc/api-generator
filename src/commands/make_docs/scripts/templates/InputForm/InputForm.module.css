@@ -1,0 +1,247 @@
+/* /Users/lethanh/WebstormProjects/audits-web/components/InputForm.module.css */
+
+/* --- Cấu trúc Form chung --- */
+.formContainer {
+    width: 100%;
+    background-color: #ffffff;
+    padding: 1.5rem;
+    border-radius: 1rem;
+    box-shadow: 0 1px 2px 0 rgb(0 0 0 / 0.05);
+    border: 1px solid #e5e7eb; /* Gray-200 */
+}
+
+.dark .formContainer {
+    background-color: #1f2937; /* Gray-800 */
+    border-color: #374151; /* Gray-700 */
+}
+
+.form {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 1rem;
+}
+
+@media (min-width: 768px) {
+    .form {
+        grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+    }
+}
+
+.formGroup {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    margin-bottom: 0.5rem;
+}
+
+.label {
+    font-size: 0.875rem; /* 14px */
+    font-weight: 500;
+    color: #374151; /* Gray-700 */
+}
+
+.dark .label {
+    color: #d1d5db; /* Gray-300 */
+}
+
+/* --- Kiểu dáng chung cho Input, Textarea, Select --- */
+.input,
+.textarea,
+.select {
+    display: block;
+    width: 100%;
+    padding: 0.625rem 0.875rem;
+    font-size: 0.875rem;
+    line-height: 1.5;
+    color: #111827; /* Gray-900 */
+    background-color: #ffffff;
+    border: 1px solid #D1D5DB; /* Gray-300 */
+    border-radius: 0.375rem;
+    box-shadow: 0 1px 2px 0 rgb(0 0 0 / 0.05);
+    transition: border-color 0.2s, box-shadow 0.2s;
+}
+
+.dark .input,
+.dark .textarea,
+.dark .select {
+    color: #f9fafb; /* Gray-50 */
+    background-color: #374151; /* Gray-700 */
+    border-color: #4b5563; /* Gray-600 */
+}
+
+
+.input::placeholder,
+.textarea::placeholder {
+    color: #9CA3AF; /* Gray-400 */
+}
+
+.dark .input::placeholder,
+.dark .textarea::placeholder {
+    color: #9ca3af; /* Gray-400 */
+}
+
+.input:focus-visible,
+.textarea:focus-visible,
+.select:focus-visible {
+    outline: none;
+    border-color: #2563EB; /* Blue-600 */
+    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.3);
+}
+
+.dark .input:focus-visible,
+.dark .textarea:focus-visible,
+.dark .select:focus-visible {
+    border-color: #3b82f6; /* Blue-500 */
+    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.4);
+}
+
+
+.input:disabled,
+.textarea:disabled,
+.select:disabled {
+    background-color: #F3F4F6; /* Gray-100 */
+    opacity: 0.7;
+    cursor: not-allowed;
+}
+
+.dark .input:disabled,
+.dark .textarea:disabled,
+.dark .select:disabled {
+    background-color: #4b5563; /* Gray-600 */
+    opacity: 0.5;
+}
+
+/* --- Kiểu dáng riêng cho từng loại --- */
+.textarea {
+    min-height: 80px;
+    resize: vertical;
+}
+
+.select {
+    -webkit-appearance: none;
+    -moz-appearance: none;
+    appearance: none;
+    background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%236b7280' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3e%3c/svg%3e");
+    background-position: right 0.7rem center;
+    background-repeat: no-repeat;
+    background-size: 1.25em;
+    padding-right: 2.5rem;
+}
+
+.dark .select {
+    background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%239ca3af' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3e%3c/svg%3e");
+}
+
+
+/* --- Kiểu dáng cho Checkbox --- */
+.checkboxWrapper {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    gap: 0.625rem;
+    padding: 0.5rem 0;
+}
+
+.checkbox {
+    height: 1rem;
+    width: 1rem;
+    border-radius: 0.25rem;
+    border-color: #D1D5DB;
+    cursor: pointer;
+    accent-color: #2563EB;
+}
+
+.dark .checkbox {
+    border-color: #4b5563; /* Gray-600 */
+    background-color: #374151; /* Gray-700 */
+}
+
+
+.checkbox:focus-visible {
+    outline: none;
+    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.3);
+}
+
+.checkboxLabel {
+    font-size: 0.875rem;
+    font-weight: 400;
+    color: #374151;
+    cursor: pointer;
+    user-select: none;
+}
+
+.dark .checkboxLabel {
+    color: #d1d5db; /* Gray-300 */
+}
+
+/* --- Kiểu dáng cho Radio Group --- */
+.radioGroup {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+}
+
+.radioWrapper {
+    display: flex;
+    align-items: center;
+    gap: 0.625rem;
+}
+
+.radio {
+    height: 1rem;
+    width: 1rem;
+    border-color: #D1D5DB;
+    cursor: pointer;
+    accent-color: #2563EB;
+}
+
+.dark .radio {
+     border-color: #4b5563; /* Gray-600 */
+}
+
+.radio:focus-visible {
+    outline: none;
+    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.3);
+}
+
+.radioLabel {
+    font-size: 0.875rem;
+    font-weight: 400;
+    color: #374151;
+    cursor: pointer;
+    user-select: none;
+}
+
+.dark .radioLabel {
+    color: #d1d5db; /* Gray-300 */
+}
+
+/* --- Các message phụ --- */
+.helperText {
+    font-size: 0.875rem;
+    color: #6B7280; /* Gray-500 */
+    margin-top: -0.1rem;
+    margin-left: 5px;
+    white-space: pre-wrap;
+}
+
+.dark .helperText {
+    color: #9ca3af; /* Gray-400 */
+}
+
+
+.errorMessage {
+    font-size: 0.875rem;
+    color: #991B1B; /* Red-800 */
+    background-color: #FEE2E2; /* Red-100 */
+    padding: 0.75rem 1rem;
+    border-radius: 0.375rem;
+    border: 1px solid #FCA5A5; /* Red-300 */
+    margin-top: 0.25rem;
+}
+
+.dark .errorMessage {
+    color: #fca5a5; /* Red-300 */
+    background-color: #450a0a; /* Red-950 */
+    border-color: #991b1b; /* Red-800 */
+}

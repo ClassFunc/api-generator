@@ -95,9 +95,9 @@ ${dataSchemaContent}
 
 ${resultSchemaContent}
 
-${defaultValues ? `
+${`
 /* ${schemaType} default values */
-export const ${sName}_defaultValues = ${JSON.stringify(defaultValues, null, 2)}` : ""}
+export const ${sName}_defaultValues = ${JSON.stringify(defaultValues || {data: {}}, null, 2)}`}
 
 `
                 , true
